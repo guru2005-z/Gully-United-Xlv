@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { CalendarDays, Check, Clock, Minus, Plus, ShieldCheck, Users, X } from "lucide-react";
-import pattern from "@/assets/brand-pattern.jpg";
+import pattern from "@/assets/pattern.asset.json";
 import {
   MAX_PLAYERS,
   VENUE,
@@ -90,12 +90,12 @@ export function BookingWidget() {
   return (
     <div className="panel relative overflow-hidden p-5 sm:p-8">
       <img
-        src={pattern}
+        src={pattern.url}
         alt=""
         aria-hidden="true"
         loading="lazy"
-        width={1024}
-        height={1024}
+        width={720}
+        height={1280}
         className="pointer-events-none absolute -right-32 -top-32 w-[420px] opacity-[0.06]"
       />
       <div className="relative">
@@ -374,12 +374,12 @@ function Confirmation({ booking, onReset }: { booking: Booking; onReset: () => v
   return (
     <div className="panel relative overflow-hidden p-6 text-center sm:p-10">
       <img
-        src={pattern}
+        src={pattern.url}
         alt=""
         aria-hidden="true"
         loading="lazy"
-        width={1024}
-        height={1024}
+        width={720}
+        height={1280}
         className="pointer-events-none absolute inset-0 h-full w-full object-cover opacity-[0.08]"
       />
       <div className="relative">
