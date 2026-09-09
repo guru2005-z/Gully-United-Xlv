@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import pattern from "@/assets/brand-pattern.jpg";
+import pattern from "@/assets/pattern.asset.json";
 import { Emblem } from "./Logo";
 import { VENUE } from "@/lib/booking";
 
@@ -17,12 +17,12 @@ export function Footer() {
   return (
     <footer className="relative overflow-hidden border-t border-border bg-background">
       <img
-        src={pattern}
+        src={pattern.url}
         alt=""
         aria-hidden="true"
         loading="lazy"
-        width={1024}
-        height={1024}
+        width={720}
+        height={1280}
         className="pointer-events-none absolute -right-24 -top-24 w-[520px] opacity-[0.07]"
       />
       <div className="relative mx-auto max-w-[1400px] px-4 py-16 sm:px-6">

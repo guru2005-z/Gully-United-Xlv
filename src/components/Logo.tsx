@@ -1,43 +1,44 @@
-interface LogoProps {
-  className?: string;
-  compact?: boolean;
+import logoAsset from "@/assets/logo.asset.json";
+
+/**
+ * Official Gully United XLV lockup (crown + GU emblem + wordmark) on black.
+ */
+export function LogoMark({ className = "h-10" }: { className?: string }) {
+  return (
+    <img
+      src={logoAsset.url}
+      alt="Gully United XLV"
+      className={`${className} w-auto object-contain`}
+      loading="eager"
+      decoding="async"
+    />
+  );
 }
 
 /**
- * Typographic GU emblem placeholder. Replace the <svg> emblem with the
- * supplied Gully United XLV logo file when it is available.
+ * Emblem-only crop of the same logo file (left portion of the lockup),
+ * used where a compact circular mark is needed.
  */
 export function Emblem({ className = "h-10 w-10" }: { className?: string }) {
   return (
-    <svg viewBox="0 0 100 100" className={className} role="img" aria-label="Gully United XLV emblem">
-      <circle cx="50" cy="50" r="46" fill="none" stroke="currentColor" strokeWidth="4" />
-      <circle cx="50" cy="50" r="37" fill="none" stroke="currentColor" strokeWidth="1.5" opacity="0.45" />
-      <text
-        x="50"
-        y="60"
-        textAnchor="middle"
-        fontFamily="Anton, sans-serif"
-        fontSize="38"
-        letterSpacing="-1"
-        fill="currentColor"
-      >
-        GU
-      </text>
-      <path d="M18 78 L82 78" stroke="currentColor" strokeWidth="3" />
-    </svg>
+    <span
+      role="img"
+      aria-label="Gully United XLV emblem"
+      className={`relative block overflow-hidden rounded-full ${className}`}
+    >
+      <img
+        src={logoAsset.url}
+        alt=""
+        aria-hidden="true"
+        className="absolute left-1/2 top-1/2 h-[290%] w-auto max-w-none -translate-x-1/2 -translate-y-1/2 object-cover"
+        style={{ marginLeft: "-31.5%" }}
+        loading="lazy"
+        decoding="async"
+      />
+    </span>
   );
 }
 
-export function Logo({ className = "", compact = false }: LogoProps) {
-  return (
-    <span className={`flex items-center gap-3 ${className}`}>
-      <Emblem className="h-9 w-9 shrink-0 text-primary" />
-      {!compact && (
-        <span className="display leading-none">
-          <span className="block text-[0.95rem] tracking-[0.18em] text-foreground">GULLY UNITED</span>
-          <span className="block text-[0.7rem] tracking-[0.55em] text-primary">XLV</span>
-        </span>
-      )}
-    </span>
-  );
+export function Logo({ className = "" }: { className?: string; compact?: boolean }) {
+  return <LogoMark className={`h-9 sm:h-11 ${className}`} />;
 }
