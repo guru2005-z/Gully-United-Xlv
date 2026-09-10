@@ -48,14 +48,17 @@ export function Loader() {
     >
       <video
         ref={videoRef}
-        src={intro.url}
         className="h-full w-full object-cover"
         muted
         playsInline
         autoPlay
         preload="auto"
         onEnded={finish}
-      />
+        onError={finish}
+      >
+        <source src={intro.url} type="video/mp4" />
+        <source src="/intro-fallback.webm" type="video/webm" />
+      </video>
       <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_top,rgba(0,0,0,0.55),transparent_40%)]" />
       <div className="absolute inset-x-0 bottom-8 flex flex-col items-center gap-5">
         <LogoMark className="h-10 opacity-90" />
