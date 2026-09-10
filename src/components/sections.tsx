@@ -318,30 +318,56 @@ export function Gallery() {
           ))}
         </div>
       </div>
+      </div>
+
 
       {open !== null && (
+      {open !== null && (
+        <div
         <div
           role="dialog"
+          role="dialog"
+          aria-modal="true"
           aria-modal="true"
           aria-label={GALLERY_TILES[open]?.label}
+          aria-label={GALLERY_TILES[open]?.label}
+          className="fixed inset-0 z-[90] grid place-items-center bg-black/90 p-6"
           className="fixed inset-0 z-[90] grid place-items-center bg-black/90 p-6"
           onClick={() => setOpen(null)}
+          onClick={() => setOpen(null)}
+        >
         >
           <button
+          <button
+            type="button"
             type="button"
             onClick={() => setOpen(null)}
+            onClick={() => setOpen(null)}
+            aria-label="Close viewer"
             aria-label="Close viewer"
             className="absolute right-5 top-5 text-foreground hover:text-primary"
+            className="absolute right-5 top-5 text-foreground hover:text-primary"
+          >
           >
             <X size={26} />
+            <X size={26} />
+          </button>
           </button>
           <div className="relative aspect-video w-full max-w-4xl overflow-hidden rounded-2xl border border-primary/50 bg-black">
+          <div className="relative aspect-video w-full max-w-4xl overflow-hidden rounded-2xl border border-primary/50 bg-black">
+            <PatternBand opacity={0.16} />
             <PatternBand opacity={0.16} />
             <div className="absolute inset-0 grid place-items-center text-center">
+            <div className="absolute inset-0 grid place-items-center text-center">
+              <div>
               <div>
                 <p className="display text-4xl">{GALLERY_TILES[open]?.label}</p>
+                <p className="display text-4xl">{GALLERY_TILES[open]?.label}</p>
+                <p className="mt-3 text-xs uppercase tracking-[0.3em] text-muted-foreground">
                 <p className="mt-3 text-xs uppercase tracking-[0.3em] text-muted-foreground">
                   Photo coming soon
+                  Photo coming soon
+                </p>
                 </p>
               </div>
             </div>
