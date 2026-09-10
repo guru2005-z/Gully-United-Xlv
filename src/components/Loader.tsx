@@ -8,10 +8,20 @@ import { LogoMark } from "./Logo";
  */
 export function Loader() {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const doneRef = useRef(false);
   const [seen, setSeen] = useState(
     () => typeof window !== "undefined" && !!window.sessionStorage.getItem("guxlv.loaded"),
   );
   const [leaving, setLeaving] = useState(false);
+
+  function finish() {
+    if (doneRef.current) return;
+    doneRef.current = true;
+    videoRef.current?.pause();
+    window.sessionStorage.setItem("guxlv.loaded", "1");
+    setLeaving(true);
+    setTimeout(() => setSeen(true), 450);
+  }
 
   useEffect(() => {
     if (seen) return;
@@ -30,21 +40,15 @@ export function Loader() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [seen]);
 
-  function finish() {
-    if (leaving || seen) return;
-    setLeaving(true);
-    window.sessionStorage.setItem("guxlv.loaded", "1");
-    setTimeout(() => setSeen(true), 650);
-  }
-
   if (seen) return null;
 
   return (
     <div
-      aria-hidden="true"
-      className={`fixed inset-0 z-[100] bg-black transition-opacity duration-700 ${
+      role="presentation"
+      className={`fixed inset-0 z-[100] bg-black transition-opacity duration-500 ${
         leaving ? "pointer-events-none opacity-0" : "opacity-100"
       }`}
+      onClick={finish}
     >
       <video
         ref={videoRef}
@@ -60,12 +64,15 @@ export function Loader() {
         <source src="/intro-fallback.webm" type="video/webm" />
       </video>
       <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_top,rgba(0,0,0,0.55),transparent_40%)]" />
-      <div className="absolute inset-x-0 bottom-8 flex flex-col items-center gap-5">
+      <div className="pointer-events-none absolute inset-x-0 bottom-8 flex flex-col items-center gap-5">
         <LogoMark className="h-10 opacity-90" />
         <button
           type="button"
-          onClick={finish}
-          className="pointer-events-auto rounded-full border border-foreground/40 px-6 py-2.5 text-xs font-extrabold uppercase tracking-[0.25em] text-foreground transition-colors hover:border-primary hover:text-primary"
+          onClick={(e) => {
+            e.stopPropagation();
+            finish();
+          }}
+          className="pointer-events-auto cursor-pointer rounded-full border border-foreground/40 px-8 py-3.5 text-xs font-extrabold uppercase tracking-[0.25em] text-foreground transition-colors hover:border-primary hover:text-primary"
         >
           Skip Intro
         </button>
