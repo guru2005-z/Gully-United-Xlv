@@ -1,52 +1,74 @@
-import { useEffect, useState } from "react";
-import { Emblem } from "./Logo";
+import { useEffect, useRef, useState } from "react";
+import intro from "@/assets/intro.asset.json";
+import { LogoMark } from "./Logo";
 
+/**
+ * Opening intro: plays the Gully United XLV brand video full-screen once per
+ * session, then fades into the homepage. Skip + reduced-motion friendly.
+ */
 export function Loader() {
-  const [stage, setStage] = useState(0);
-  const [gone, setGone] = useState(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [seen, setSeen] = useState(
+    () => typeof window !== "undefined" && !!window.sessionStorage.getItem("guxlv.loaded"),
+  );
+  const [leaving, setLeaving] = useState(false);
 
   useEffect(() => {
-    if (typeof window !== "undefined" && window.sessionStorage.getItem("guxlv.loaded")) {
-      setGone(true);
+    if (seen) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      finish();
       return;
     }
-    const t1 = setTimeout(() => setStage(1), 420);
-    const t2 = setTimeout(() => setStage(2), 1150);
-    const t3 = setTimeout(() => {
-      setGone(true);
-      window.sessionStorage.setItem("guxlv.loaded", "1");
-    }, 1750);
-    return () => {
-      clearTimeout(t1);
-      clearTimeout(t2);
-      clearTimeout(t3);
-    };
-  }, []);
+    // Failsafe: never hold the intro longer than the clip length.
+    const t = setTimeout(finish, 12000);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [seen]);
 
-  if (gone) return null;
+  useEffect(() => {
+    if (!seen) videoRef.current?.play().catch(() => finish());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [seen]);
+
+  function finish() {
+    if (leaving || seen) return;
+    setLeaving(true);
+    window.sessionStorage.setItem("guxlv.loaded", "1");
+    setTimeout(() => setSeen(true), 650);
+  }
+
+  if (seen) return null;
 
   return (
     <div
       aria-hidden="true"
-      className={`fixed inset-0 z-[100] grid place-items-center bg-background transition-opacity duration-500 ${
-        stage === 2 ? "pointer-events-none opacity-0" : "opacity-100"
+      className={`fixed inset-0 z-[100] bg-black transition-opacity duration-700 ${
+        leaving ? "pointer-events-none opacity-0" : "opacity-100"
       }`}
     >
-      <div className="text-center">
-        <Emblem className="mx-auto h-16 w-16 animate-pulse-glow text-primary" />
-        <p
-          className={`display mt-6 text-2xl tracking-[0.3em] transition-all duration-500 ${
-            stage >= 1 ? "opacity-100" : "translate-y-2 opacity-0"
-          }`}
+      <video
+        ref={videoRef}
+        className="h-full w-full object-cover"
+        muted
+        playsInline
+        autoPlay
+        preload="auto"
+        onEnded={finish}
+        onError={finish}
+      >
+        <source src={intro.url} type="video/mp4" />
+        <source src="/intro-fallback.webm" type="video/webm" />
+      </video>
+      <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_top,rgba(0,0,0,0.55),transparent_40%)]" />
+      <div className="absolute inset-x-0 bottom-8 flex flex-col items-center gap-5">
+        <LogoMark className="h-10 opacity-90" />
+        <button
+          type="button"
+          onClick={finish}
+          className="pointer-events-auto rounded-full border border-foreground/40 px-6 py-2.5 text-xs font-extrabold uppercase tracking-[0.25em] text-foreground transition-colors hover:border-primary hover:text-primary"
         >
-          Gully United <span className="text-primary">XLV</span>
-        </p>
-        <div className="mx-auto mt-6 h-px w-56 overflow-hidden bg-border">
-          <div
-            className="h-full bg-primary transition-[width] duration-1000 ease-out"
-            style={{ width: stage >= 1 ? "100%" : "8%" }}
-          />
-        </div>
+          Skip Intro
+        </button>
       </div>
     </div>
   );

@@ -79,8 +79,8 @@ export function bookableDays(from = new Date()): Date[] {
 }
 
 export function prettyDate(key: string): string {
-  const [y, m, d] = key.split("-").map(Number);
-  const date = new Date(y, (m ?? 1) - 1, d);
+  const [y = 0, m = 1, d = 1] = key.split("-").map(Number);
+  const date = new Date(y, m - 1, d);
   return date
     .toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })
     .toUpperCase();
@@ -164,7 +164,7 @@ export async function createPaymentOrder(_booking: Booking): Promise<{ ready: fa
 }
 
 export function calendarLink(b: Booking): string {
-  const [y, m, d] = b.dateKey.split("-").map(Number);
+  const [y = 0, m = 1, d = 1] = b.dateKey.split("-").map(Number);
   const pad = (n: number) => `${n}`.padStart(2, "0");
   const start = `${y}${pad(m)}${pad(d)}T${pad(b.hour)}0000`;
   const end = `${y}${pad(m)}${pad(d)}T${pad(b.hour + 1)}0000`;
