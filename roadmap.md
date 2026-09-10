@@ -2,7 +2,7 @@
 
 ## Open
 - [ ] Add Video_Project.mp4 as the opening intro (login/load screen)
-- [ ] Admin dashboard route (/admin)
+- [x] Admin dashboard route (/admin)
 - [ ] Verify build + preview (desktop & mobile)
 
 ## Done
