@@ -323,7 +323,7 @@ export function Gallery() {
         <div
           role="dialog"
           aria-modal="true"
-          aria-label={GALLERY_TILES[open].label}
+          aria-label={GALLERY_TILES[open]?.label}
           className="fixed inset-0 z-[90] grid place-items-center bg-black/90 p-6"
           onClick={() => setOpen(null)}
         >
@@ -339,7 +339,7 @@ export function Gallery() {
             <PatternBand opacity={0.16} />
             <div className="absolute inset-0 grid place-items-center text-center">
               <div>
-                <p className="display text-4xl">{GALLERY_TILES[open].label}</p>
+                <p className="display text-4xl">{GALLERY_TILES[open]?.label}</p>
                 <p className="mt-3 text-xs uppercase tracking-[0.3em] text-muted-foreground">
                   Photo coming soon
                 </p>
