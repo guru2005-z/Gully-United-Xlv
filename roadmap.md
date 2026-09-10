@@ -1,9 +1,9 @@
 # Gully United XLV — Roadmap
 
 ## Open
-- [ ] Add Video_Project.mp4 as the opening intro (login/load screen)
+- [x] Video intro plays on first visit (muted, skip button, once per session)
 - [x] Admin dashboard route (/admin)
-- [ ] Verify build + preview (desktop & mobile)
+- [x] Verified: intro video, home, admin — build OK
 
 ## Done
 - [x] Design system: black + neon lime, Anton/Manrope
