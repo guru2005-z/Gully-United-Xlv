@@ -52,11 +52,11 @@ export function BookingWidget() {
 
   function validate() {
     const e: Record<string, string> = {};
-    if (!form.name.trim()) e.name = "Enter your name.";
-    if (!isValidPhone(form.phone)) e.phone = "Enter a valid phone number.";
-    if (!isValidEmail(form.email)) e.email = "Enter a valid email address.";
-    if (players < 1 || players > MAX_PLAYERS) e.players = `Maximum ${MAX_PLAYERS} players per booking.`;
-    if (hour === null) e.hour = "Select a time slot.";
+    if (!form.name.trim()) e["name"] = "Enter your name.";
+    if (!isValidPhone(form.phone)) e["phone"] = "Enter a valid phone number.";
+    if (!isValidEmail(form.email)) e["email"] = "Enter a valid email address.";
+    if (players < 1 || players > MAX_PLAYERS) e["players"] = `Maximum ${MAX_PLAYERS} players per booking.`;
+    if (hour === null) e["hour"] = "Select a time slot.";
     setErrors(e);
     return Object.keys(e).length === 0;
   }
@@ -206,7 +206,7 @@ export function BookingWidget() {
               })}
             </div>
           )}
-          {errors.hour && <p className="mt-2 text-xs font-bold text-destructive">{errors.hour}</p>}
+          {errors["hour"] && <p className="mt-2 text-xs font-bold text-destructive">{errors["hour"]}</p>}
         </fieldset>
 
         {/* Step 3 — players */}
@@ -251,7 +251,7 @@ export function BookingWidget() {
                 placeholder="Your name"
                 autoComplete="name"
               />
-              {errors.name && <span className="mt-1 block text-destructive">{errors.name}</span>}
+              {errors["name"] && <span className="mt-1 block text-destructive">{errors["name"]}</span>}
             </label>
             <label className="block text-xs font-bold uppercase tracking-[0.16em] text-muted-foreground">
               Phone
@@ -263,7 +263,7 @@ export function BookingWidget() {
                 inputMode="tel"
                 autoComplete="tel"
               />
-              {errors.phone && <span className="mt-1 block text-destructive">{errors.phone}</span>}
+              {errors["phone"] && <span className="mt-1 block text-destructive">{errors["phone"]}</span>}
             </label>
             <label className="block text-xs font-bold uppercase tracking-[0.16em] text-muted-foreground">
               Email
@@ -275,7 +275,7 @@ export function BookingWidget() {
                 inputMode="email"
                 autoComplete="email"
               />
-              {errors.email && <span className="mt-1 block text-destructive">{errors.email}</span>}
+              {errors["email"] && <span className="mt-1 block text-destructive">{errors["email"]}</span>}
             </label>
           </div>
         </fieldset>
@@ -305,9 +305,9 @@ export function BookingWidget() {
           </dl>
         </div>
 
-        {errors.form && (
+        {errors["form"] && (
           <p className="mt-4 rounded-lg border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm font-bold text-destructive">
-            {errors.form}
+            {errors["form"]}
           </p>
         )}
 

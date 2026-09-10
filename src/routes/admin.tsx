@@ -200,7 +200,7 @@ function AdminPage() {
                   aria-label="Previous day"
                   onClick={() => {
                     const i = days.findIndex((d) => dateKey(d) === viewDate);
-                    if (i > 0) setViewDate(dateKey(days[i - 1]));
+                    { const d = days[i - 1]; if (d) setViewDate(dateKey(d)); }
                   }}
                   className="grid h-9 w-9 place-items-center rounded-full border border-border hover:border-primary hover:text-primary"
                 >
@@ -214,7 +214,7 @@ function AdminPage() {
                   aria-label="Next day"
                   onClick={() => {
                     const i = days.findIndex((d) => dateKey(d) === viewDate);
-                    if (i < days.length - 1) setViewDate(dateKey(days[i + 1]));
+                    { const d = days[i + 1]; if (d) setViewDate(dateKey(d)); }
                   }}
                   className="grid h-9 w-9 place-items-center rounded-full border border-border hover:border-primary hover:text-primary"
                 >
