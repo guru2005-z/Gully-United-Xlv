@@ -65,8 +65,8 @@ export function Loader() {
         autoPlay
         preload="auto"
         onEnded={() => {
-          // Hold the final frame for 3 seconds, then reveal the homepage.
-          window.setTimeout(transitionToHome, 3000);
+          // Hold the final frame for 6 seconds, then reveal the homepage.
+          window.setTimeout(transitionToHome, 6000);
         }}
         onError={transitionToHome}
       >
