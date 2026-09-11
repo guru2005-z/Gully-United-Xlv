@@ -3,14 +3,15 @@ import intro from "@/assets/intro.asset.json";
 
 /**
  * Opening intro: plays the Gully United XLV brand video full-screen once per
- * session, then reveals the homepage when playback finishes.
+ * session. When playback finishes, the video stays on screen for 3 more seconds
+ * before the homepage is revealed.
  */
 export function Loader() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const doneRef = useRef(false);
   const [seen, setSeen] = useState(false);
 
-  function finish() {
+  function transitionToHome() {
     if (doneRef.current) return;
     doneRef.current = true;
     videoRef.current?.pause();
@@ -35,13 +36,16 @@ export function Loader() {
 
     const video = videoRef.current;
     if (!video) {
-      finish();
+      transitionToHome();
       return;
     }
 
-    video.play().catch(finish);
-    // Failsafe only applies if a browser fails to emit the standard ended event.
-    const timeout = window.setTimeout(finish, 15000);
+    // Try to start playback explicitly, but never skip the video if a browser
+    // blocks autoplay — the native autoplay attribute will still attempt it.
+    video.play().catch(() => {});
+
+    // Failsafe only applies if the browser never emits ended/error.
+    const timeout = window.setTimeout(transitionToHome, 20000);
     return () => window.clearTimeout(timeout);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -60,8 +64,11 @@ export function Loader() {
         playsInline
         autoPlay
         preload="auto"
-        onEnded={finish}
-        onError={finish}
+        onEnded={() => {
+          // Hold the final frame for 3 seconds, then reveal the homepage.
+          window.setTimeout(transitionToHome, 3000);
+        }}
+        onError={transitionToHome}
       >
         <source src={intro.url} type="video/mp4" />
         <source src="/intro-fallback.webm" type="video/webm" />
