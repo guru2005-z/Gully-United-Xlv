@@ -1,54 +1,57 @@
 import { useEffect, useRef, useState } from "react";
 import intro from "@/assets/intro.asset.json";
-import { LogoMark } from "./Logo";
 
 /**
  * Opening intro: plays the Gully United XLV brand video full-screen once per
- * session, then fades into the homepage. Skip + reduced-motion friendly.
+ * session, then reveals the homepage when playback finishes.
  */
 export function Loader() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const doneRef = useRef(false);
-  const [seen, setSeen] = useState(
-    () => typeof window !== "undefined" && !!window.sessionStorage.getItem("guxlv.loaded"),
-  );
-  const [leaving, setLeaving] = useState(false);
+  const [seen, setSeen] = useState(false);
 
   function finish() {
     if (doneRef.current) return;
     doneRef.current = true;
     videoRef.current?.pause();
-    window.sessionStorage.setItem("guxlv.loaded", "1");
-    setLeaving(true);
-    setTimeout(() => setSeen(true), 450);
+    try {
+      window.sessionStorage.setItem("guxlv.loaded", "1");
+    } catch {
+      // Storage can be unavailable in private browsing; playback still completes.
+    }
+    setSeen(true);
   }
 
   useEffect(() => {
-    if (seen) return;
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    try {
+      if (window.sessionStorage.getItem("guxlv.loaded")) {
+        doneRef.current = true;
+        setSeen(true);
+        return;
+      }
+    } catch {
+      // Continue with the intro when session storage is unavailable.
+    }
+
+    const video = videoRef.current;
+    if (!video) {
       finish();
       return;
     }
-    // Failsafe: never hold the intro longer than the clip length.
-    const t = setTimeout(finish, 12000);
-    return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [seen]);
 
-  useEffect(() => {
-    if (!seen) videoRef.current?.play().catch(() => finish());
+    video.play().catch(finish);
+    // Failsafe only applies if a browser fails to emit the standard ended event.
+    const timeout = window.setTimeout(finish, 15000);
+    return () => window.clearTimeout(timeout);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [seen]);
+  }, []);
 
   if (seen) return null;
 
   return (
     <div
       role="presentation"
-      className={`fixed inset-0 z-[100] bg-black transition-opacity duration-500 ${
-        leaving ? "pointer-events-none opacity-0" : "opacity-100"
-      }`}
-      onClick={finish}
+      className="fixed inset-0 z-[100] bg-black"
     >
       <video
         ref={videoRef}
@@ -63,20 +66,6 @@ export function Loader() {
         <source src={intro.url} type="video/mp4" />
         <source src="/intro-fallback.webm" type="video/webm" />
       </video>
-      <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_top,rgba(0,0,0,0.55),transparent_40%)]" />
-      <div className="pointer-events-none absolute inset-x-0 bottom-8 flex flex-col items-center gap-5">
-        <LogoMark className="h-10 opacity-90" />
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            finish();
-          }}
-          className="pointer-events-auto cursor-pointer rounded-full border border-foreground/40 px-8 py-3.5 text-xs font-extrabold uppercase tracking-[0.25em] text-foreground transition-colors hover:border-primary hover:text-primary"
-        >
-          Skip Intro
-        </button>
-      </div>
     </div>
   );
 }
