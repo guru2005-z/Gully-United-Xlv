@@ -1,7 +1,7 @@
 # Gully United XLV — Roadmap
 
 ## Open
-- [ ] Remove intro skipping and reveal the homepage automatically when the video finishes
+- [x] Remove intro skipping and reveal the homepage automatically when the video finishes
 - [x] Video intro plays on first visit (muted, once per session)
 - [x] Admin dashboard route (/admin)
 - [x] Verified: intro video, home, admin — build OK
