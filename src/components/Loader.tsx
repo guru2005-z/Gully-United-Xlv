@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import intro from "@/assets/intro.asset.json";
 
 const HOLD_AFTER_END_MS = 5000;
 /** Absolute worst case — only used if the video never reports progress at all. */
@@ -96,7 +95,7 @@ export function Loader() {
         disableRemotePlayback
         onEnded={handleEnded}
       >
-        <source src={intro.url} type="video/mp4" />
+        <source src="/intro.mp4" type="video/mp4" />
         <source src="/intro-fallback.webm" type="video/webm" />
       </video>
     </div>
