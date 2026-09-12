@@ -16,6 +16,7 @@ import { Nav } from "../components/Nav";
 import { Footer } from "../components/Footer";
 import { Loader } from "../components/Loader";
 import { MobileBookBar } from "../components/sections";
+import { FloatingDownload } from "../components/FloatingDownload";
 
 function NotFoundComponent() {
   return (
@@ -133,6 +134,7 @@ function RootComponent() {
       </main>
       {!isAdmin && <Footer />}
       {!isAdmin && <MobileBookBar />}
+      {!isAdmin && <FloatingDownload />}
     </QueryClientProvider>
   );
 }
