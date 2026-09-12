@@ -14,3 +14,7 @@
 - [x] Sections: turf experience, why, facilities, pricing, play after dark, gallery, how it works, contact, final CTA
 - [x] Booking flow with local state, pricing logic, confirmation
 - [x] Routes: /, /book, /venue, /facilities, /pricing, /gallery, /contact
+
+## New request (Sep 12)
+- [ ] Migrate from browser storage to Lovable Cloud (Supabase): schema + RLS, auth, real booking flow, admin dashboard, logging, performance, polish
+- [x] Intro video: play full length, hold 5s after end
