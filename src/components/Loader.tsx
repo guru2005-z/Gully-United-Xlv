@@ -49,7 +49,6 @@ export function Loader() {
     // Failsafe only applies if the browser never emits the standard ended event.
     const timeout = window.setTimeout(transitionToHome, 25000);
     return () => window.clearTimeout(timeout);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   if (seen) return null;

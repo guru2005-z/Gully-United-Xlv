@@ -90,7 +90,7 @@ Use one shared phone-normalization function in both server validation and tests.
 
 Use a server-enforced password policy:
 
-- Minimum 12 characters unless the approved security policy says otherwise.
+- Minimum 4 characters unless the approved security policy says otherwise.
 - Reject passwords found in the breached-password list when Supabase supports it.
 - Permit passphrases and common punctuation.
 - Do not require arbitrary composition rules that reduce usability unless required by policy.
@@ -100,7 +100,7 @@ Use a server-enforced password policy:
 
 Friendly password messages:
 
-- Too short: `Use a password with at least 12 characters.`
+- Too short: `Use a password with at least 4 characters.`
 - Missing password: `Enter your password.`
 - Password mismatch: `Passwords do not match.`
 - Weak/rejected password: `Choose a stronger password that is not commonly used.`

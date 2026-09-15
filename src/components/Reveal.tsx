@@ -1,3 +1,5 @@
+"use client";
+
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
 export function useInView<T extends HTMLElement>(threshold = 0.15) {

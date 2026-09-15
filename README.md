@@ -21,8 +21,9 @@ Do NOT invent venue photos.
 Use the uploaded images wherever appropriate.
 
 ==================================================
+
 1. CORE DESIGN DIRECTION
-==================================================
+   \==================================================
 
 The entire website should look like a premium sports-tech startup combined with an underground street-sports brand.
 
@@ -58,8 +59,7 @@ Use the uploaded lime/black abstract pattern as a subtle background texture in s
 Do NOT cover the entire website with the pattern.
 Use it as a premium visual accent.
 
-==================================================
-2. TYPOGRAPHY
+================================================== 2. TYPOGRAPHY
 ==================================================
 
 Use bold condensed sports-style typography for headings.
@@ -74,6 +74,7 @@ Headings should feel similar to:
 Use extremely large typography on hero sections.
 
 Heading style:
+
 - uppercase
 - bold
 - condensed
@@ -82,14 +83,14 @@ Heading style:
 - large scale
 
 Body typography:
+
 - clean modern sans-serif
 - highly readable
 - medium weight
 
 Use typography hierarchy similar to premium sports brands such as Nike / Adidas / modern football clubs, but DO NOT copy their branding.
 
-==================================================
-3. NAVIGATION
+================================================== 3. NAVIGATION
 ==================================================
 
 Create a premium sticky navigation bar.
@@ -111,6 +112,7 @@ Right side:
 "BOOK NOW" neon lime button
 
 Navigation behavior:
+
 - transparent over hero initially
 - becomes black/glass when scrolling
 - subtle blur
@@ -118,14 +120,14 @@ Navigation behavior:
 - active navigation indicator in neon lime
 
 Mobile:
+
 - compact logo
 - hamburger menu
 - full-screen animated mobile navigation
 - large typography
 - neon lime hover/tap effects
 
-==================================================
-4. HERO SECTION
+================================================== 4. HERO SECTION
 ==================================================
 
 Create an extremely impressive full-screen hero section.
@@ -139,6 +141,7 @@ Use the uploaded Gully United XLV branding.
 Show a realistic 3D artificial turf/cricket pitch environment in the background.
 
 Include:
+
 - artificial turf
 - cricket stumps
 - floodlights
@@ -179,6 +182,7 @@ MAX 16 PLAYERS
 6 AM – 11 PM
 
 Hero animation:
+
 - logo slowly rotates or moves in 3D
 - turf lights turn on progressively
 - neon lime glow pulses very subtly
@@ -192,8 +196,7 @@ DO NOT make animations distracting.
 
 The hero must feel premium and fast.
 
-==================================================
-5. 3D SPORTS EXPERIENCE
+================================================== 5. 3D SPORTS EXPERIENCE
 ==================================================
 
 Create a dedicated section showing a 3D representation of the turf.
@@ -205,6 +208,7 @@ Title:
 Show a stylized 3D artificial cricket turf.
 
 Include:
+
 - 100 × 50 ft pitch
 - cricket stumps
 - floodlights
@@ -215,6 +219,7 @@ Include:
 - ball
 
 Allow subtle interaction:
+
 - rotate/tilt slightly based on cursor
 - lights glow on hover
 - pitch dimensions appear as animated labels
@@ -228,8 +233,7 @@ MAX 16 PLAYERS
 
 Use neon lime outlines.
 
-==================================================
-6. QUICK BOOKING SECTION
+================================================== 6. QUICK BOOKING SECTION
 ==================================================
 
 This should be one of the most important sections.
@@ -314,8 +318,7 @@ PRICE
 Button:
 "CONFIRM BOOKING"
 
-==================================================
-7. PRICING
+================================================== 7. PRICING
 ==================================================
 
 Create a visually powerful pricing section.
@@ -353,13 +356,13 @@ Add:
 Create animated pricing cards.
 
 When user hovers:
+
 - card lifts
 - neon border appears
 - background glow increases
 - subtle 3D tilt
 
-==================================================
-8. WHY GULLY UNITED
+================================================== 8. WHY GULLY UNITED
 ==================================================
 
 Heading:
@@ -394,8 +397,7 @@ Each card should have a custom minimal 3D icon.
 
 Use lime line-art icons.
 
-==================================================
-9. FACILITIES SECTION
+================================================== 9. FACILITIES SECTION
 ==================================================
 
 Heading:
@@ -414,6 +416,7 @@ BAT
 STUMPS
 
 Each card:
+
 - black background
 - lime icon
 - white heading
@@ -423,8 +426,7 @@ Each card:
 
 Use realistic small 3D icons rather than emoji.
 
-==================================================
-10. GALLERY
+================================================== 10. GALLERY
 ==================================================
 
 Create a premium asymmetric sports gallery.
@@ -434,6 +436,7 @@ Use the uploaded venue/turf images.
 Do not invent photographs.
 
 Gallery style:
+
 - masonry/asymmetric layout
 - large hero image
 - smaller floating images
@@ -442,6 +445,7 @@ Gallery style:
 - neon lime borders on hover
 
 Interactions:
+
 - image zoom
 - smooth transitions
 - fullscreen image viewer
@@ -451,8 +455,7 @@ Add heading:
 
 "SEE THE GULLY."
 
-==================================================
-11. IMMERSIVE DARK SECTION
+================================================== 11. IMMERSIVE DARK SECTION
 ==================================================
 
 Create a full-width cinematic section.
@@ -481,8 +484,7 @@ Add CTA:
 
 This section should feel like a sports commercial.
 
-==================================================
-12. HOW BOOKING WORKS
+================================================== 12. HOW BOOKING WORKS
 ==================================================
 
 Create a 4-step horizontal timeline.
@@ -502,12 +504,12 @@ CONFIRM & PLAY
 Use animated line connecting all four steps.
 
 On scroll:
+
 - each step appears sequentially
 - number scales slightly
 - connecting line animates in neon lime
 
-==================================================
-13. CONTACT SECTION
+================================================== 13. CONTACT SECTION
 ==================================================
 
 Heading:
@@ -550,8 +552,7 @@ SC Boys Residential School Road, Kota
 
 Do not invent exact GPS coordinates.
 
-==================================================
-14. FOOTER
+================================================== 14. FOOTER
 ==================================================
 
 Premium black footer.
@@ -585,8 +586,7 @@ Copyright:
 Add social media placeholders only if needed.
 Do not invent social media usernames.
 
-==================================================
-15. BOOKING SYSTEM FUNCTIONALITY
+================================================== 15. BOOKING SYSTEM FUNCTIONALITY
 ==================================================
 
 The website must behave like a real booking website, not just a static landing page.
@@ -637,8 +637,7 @@ Example:
 
 10:00 PM → ₹499
 
-==================================================
-16. BOOKING CONFIRMATION
+================================================== 16. BOOKING CONFIRMATION
 ==================================================
 
 After confirmation show a beautiful booking confirmation screen.
@@ -671,8 +670,7 @@ For prototype mode, store booking state locally.
 
 Structure the code so a real backend/database/payment system can be connected later.
 
-==================================================
-17. PAYMENT READY ARCHITECTURE
+================================================== 17. PAYMENT READY ARCHITECTURE
 ==================================================
 
 Design the booking flow so payment can later be integrated with Razorpay.
@@ -698,8 +696,7 @@ POST /api/payments/verify
 
 Do not expose secret keys in frontend code.
 
-==================================================
-18. ADMIN DASHBOARD
+================================================== 18. ADMIN DASHBOARD
 ==================================================
 
 Create an admin dashboard route/design as part of the application.
@@ -731,10 +728,12 @@ PENDING
 CANCELLED
 
 Calendar view:
+
 - booked slots
 - available slots
 
 Admin should be able to:
+
 - view bookings
 - cancel booking
 - block a slot
@@ -743,8 +742,7 @@ Admin should be able to:
 
 Design dashboard in the same black + neon lime theme.
 
-==================================================
-19. MOBILE-FIRST EXPERIENCE
+================================================== 19. MOBILE-FIRST EXPERIENCE
 ==================================================
 
 This website must be exceptional on mobile.
@@ -763,8 +761,7 @@ Mobile layout:
 
 The booking interface should be extremely easy for a customer using a phone.
 
-==================================================
-20. ANIMATIONS
+================================================== 20. ANIMATIONS
 ==================================================
 
 Use high-quality modern animation throughout.
@@ -798,8 +795,7 @@ opacity
 
 Avoid excessive blur and expensive effects.
 
-==================================================
-21. 3D DESIGN
+================================================== 21. 3D DESIGN
 ==================================================
 
 Use Three.js / React Three Fiber style architecture if supported.
@@ -822,8 +818,7 @@ reduce 3D complexity automatically.
 
 If full WebGL cannot be implemented by the generated environment, create a visually convincing CSS 3D fallback instead.
 
-==================================================
-22. BRAND PATTERN
+================================================== 22. BRAND PATTERN
 ==================================================
 
 Use the uploaded black-and-neon-lime abstract pattern as a brand texture.
@@ -840,8 +835,7 @@ Use low opacity.
 
 Do not make it visually overwhelming.
 
-==================================================
-23. LOGO
+================================================== 23. LOGO
 ==================================================
 
 Use the uploaded Gully United XLV logo.
@@ -857,12 +851,12 @@ Preserve its proportions.
 Do not distort it.
 
 Use:
+
 - normal logo
 - monochrome logo if required
 - neon version only when visually appropriate
 
-==================================================
-24. UX DETAILS
+================================================== 24. UX DETAILS
 ==================================================
 
 Add micro-interactions:
@@ -876,32 +870,36 @@ WHATSAPP →
 GET DIRECTIONS →
 
 Button hover:
+
 - neon lime background
 - black text
 - slight scale
 - arrow moves right
 
 Cards:
+
 - slight 3D tilt
 - glow
 - border animation
 
 Inputs:
+
 - black background
 - lime focus border
 - white text
 
 Selected booking slot:
+
 - neon lime background
 - black text
 
 Unavailable slot:
+
 - dark gray
 - disabled
 - visually obvious
 
-==================================================
-25. LOADING EXPERIENCE
+================================================== 25. LOADING EXPERIENCE
 ==================================================
 
 Create a premium loading animation.
@@ -922,8 +920,7 @@ Transition into homepage.
 
 Keep loading animation short.
 
-==================================================
-26. ERROR / EMPTY STATES
+================================================== 26. ERROR / EMPTY STATES
 ==================================================
 
 Create professional states for:
@@ -948,8 +945,7 @@ Booking failure:
 
 "Something went wrong. Please try again."
 
-==================================================
-27. SEO
+================================================== 27. SEO
 ==================================================
 
 Optimize the site for:
@@ -971,13 +967,13 @@ Meta description:
 
 Book Gully United XLV, a premium 100 × 50 ft artificial cricket turf in Kota with 14 floodlights, changing rooms, parking and 1-hour booking slots.
 
-==================================================
-28. PERFORMANCE
+================================================== 28. PERFORMANCE
 ==================================================
 
 The website must feel fast.
 
 Optimize:
+
 - images
 - 3D assets
 - animations
@@ -991,8 +987,7 @@ Lazy load gallery images.
 
 Do not load heavy 3D assets before needed.
 
-==================================================
-29. ACCESSIBILITY
+================================================== 29. ACCESSIBILITY
 ==================================================
 
 Include:
@@ -1009,8 +1004,7 @@ Include:
 If user has reduced motion enabled:
 disable excessive parallax and 3D motion.
 
-==================================================
-30. RESPONSIVE BREAKPOINTS
+================================================== 30. RESPONSIVE BREAKPOINTS
 ==================================================
 
 Design carefully for:
@@ -1027,8 +1021,7 @@ The desktop version should feel cinematic.
 
 The mobile version should feel like a premium sports booking app.
 
-==================================================
-31. PAGE STRUCTURE
+================================================== 31. PAGE STRUCTURE
 ==================================================
 
 Create these routes/pages:
@@ -1057,8 +1050,7 @@ Contact
 /admin
 Admin Dashboard
 
-==================================================
-32. HOMEPAGE ORDER
+================================================== 32. HOMEPAGE ORDER
 ==================================================
 
 Homepage should follow this exact storytelling structure:
@@ -1078,8 +1070,7 @@ Homepage should follow this exact storytelling structure:
 13. Final CTA
 14. Footer
 
-==================================================
-33. FINAL CTA
+================================================== 33. FINAL CTA
 ==================================================
 
 Before the footer create a huge final section.
@@ -1103,8 +1094,7 @@ WHATSAPP US
 
 Add subtle 3D cricket ball movement in background.
 
-==================================================
-34. VISUAL QUALITY
+================================================== 34. VISUAL QUALITY
 ==================================================
 
 The website should NOT look like:
@@ -1130,8 +1120,7 @@ high-end 3D interaction
 
 But maintain a completely original Gully United XLV identity.
 
-==================================================
-35. IMPORTANT FUNCTIONAL REQUIREMENT
+================================================== 35. IMPORTANT FUNCTIONAL REQUIREMENT
 ==================================================
 
 Build the UI as a real application architecture rather than a collection of screenshots.
@@ -1168,8 +1157,7 @@ Use realistic data based ONLY on the business information provided above.
 
 Do not invent additional business claims.
 
-==================================================
-36. FINAL DESIGN CHECK
+================================================== 36. FINAL DESIGN CHECK
 ==================================================
 
 Before completing the design, verify:

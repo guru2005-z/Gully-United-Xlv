@@ -1,3 +1,5 @@
+"use client";
+
 import logoAsset from "@/assets/logo.asset.json";
 
 /**

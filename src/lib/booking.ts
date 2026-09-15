@@ -11,7 +11,7 @@ export const ADVANCE_DAYS = 7;
 export const VENUE = {
   name: "Gully United XLV",
   tagline: "Sports. Energy. Community.",
-  address: "SC Boys Residential School Road, Kota",
+  address: "SC Boys Residential School Road, Kota, Nellore, Andhra Pradesh, 524411",
   phone: "9390817811",
   phoneIntl: "919390817811",
   email: "Gullyunitedxlv@gmail.com",
@@ -23,7 +23,7 @@ export const WHATSAPP_URL = `https://wa.me/${VENUE.phoneIntl}?text=${encodeURICo
 )}`;
 
 export const MAPS_URL = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
-  "SC Boys Residential School Road, Kota",
+  "SC Boys Residential School Road, Kota, Nellore, Andhra Pradesh, 524411",
 )}`;
 
 export type BookingStatus =
@@ -168,6 +168,47 @@ export function takenHours(key: string, list: Booking[]): number[] {
 export async function loadBookings(range?: { from: string; to: string }): Promise<Booking[]> {
   const from = range?.from ?? dateKey(new Date());
   const to = range?.to ?? dateKey(new Date(Date.now() + ADVANCE_DAYS * 24 * 60 * 60 * 1000));
+
+  if (typeof window !== "undefined") {
+    try {
+      const res = await fetch(`/api/availability?date=${from}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data.hours)) {
+          const unavailableHours: number[] = data.hours
+            .filter((h: { hour: number; available: boolean }) => !h.available)
+            .map((h: { hour: number; available: boolean }) => h.hour);
+
+          const existing = readBookings();
+          const merged = [...existing];
+          for (const hour of unavailableHours) {
+            if (!merged.some((b) => b.dateKey === from && b.hour === hour)) {
+              merged.push({
+                id: `remote-${from}-${hour}`,
+                ref: "BOOKED",
+                name: "Booked Slot",
+                phone: "",
+                email: "",
+                players: 0,
+                dateKey: from,
+                hour,
+                amount: priceForHour(hour),
+                status: "CONFIRMED",
+                paymentStatus: "PAID",
+                paymentMethod: null,
+                notes: null,
+                createdAt: new Date().toISOString(),
+              });
+            }
+          }
+          memoryBookings = merged;
+        }
+      }
+    } catch {
+      // Fallback to local memory bookings if backend API is offline
+    }
+  }
+
   return readBookings()
     .filter((booking) => booking.dateKey >= from && booking.dateKey <= to)
     .sort((a, b) => `${a.dateKey}${a.hour}`.localeCompare(`${b.dateKey}${b.hour}`));
@@ -179,6 +220,52 @@ export async function createBooking(
 ): Promise<Booking> {
   const parsed = bookingInputSchema.parse(input);
   const requestKey = idempotencyKey ?? newId();
+
+  if (typeof window !== "undefined") {
+    try {
+      const res = await fetch("/api/bookings", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "idempotency-key": requestKey,
+        },
+        body: JSON.stringify(parsed),
+      });
+
+      if (res.status === 409) {
+        throw new Error("SLOT_TAKEN");
+      }
+
+      if (res.ok) {
+        const body = await res.json();
+        if (body.booking) {
+          const b: Booking = {
+            id: body.booking.id,
+            ref: body.booking.reference,
+            name: body.booking.customer_name,
+            phone: body.booking.phone,
+            email: body.booking.email,
+            players: body.booking.players,
+            dateKey: body.booking.date_key,
+            hour: body.booking.start_hour,
+            amount: body.booking.amount,
+            status: body.booking.status,
+            paymentStatus: body.booking.payment_status,
+            paymentMethod: body.booking.payment_method ?? "pay_at_venue",
+            notes: body.booking.notes ?? null,
+            createdAt: body.booking.created_at,
+          };
+          const existing = readBookings();
+          writeBookings([...existing.filter((x) => x.id !== b.id), b]);
+          return b;
+        }
+      }
+    } catch (err) {
+      if ((err as Error).message === "SLOT_TAKEN") throw err;
+      // Fallback to in-browser creation if backend is in fallback mode
+    }
+  }
+
   const existing = readBookings();
   const repeat = existing.find((booking) => booking.id === requestKey);
   if (repeat) return repeat;
