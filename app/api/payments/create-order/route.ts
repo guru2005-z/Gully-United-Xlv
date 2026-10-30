@@ -3,13 +3,14 @@ import { z } from "zod";
 import { createSupabaseServerClient } from "@/lib/supabase-auth-server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { createRazorpayOrder } from "@/lib/adapters/razorpay-adapter";
-import { calculateSlotPrice } from "@/lib/domain/venue";
+import { calculateSlotPrice, isBookingDateValid, VENUE_RULES } from "@/lib/domain/venue";
+import { normalizeIndianPhone } from "@/lib/auth-domain";
 
 const createOrderSchema = z.object({
   bookingId: z.string().uuid("Invalid booking ID format.").optional(),
   date: z.string().optional(),
   hour: z.number().int().min(6).max(22).optional(),
-  players: z.number().int().min(1).max(20).optional(),
+  players: z.number().int().min(1).max(16).optional(),
   idempotencyKey: z.string().optional(),
   customerName: z.string().optional(),
   customerPhone: z.string().optional(),
@@ -20,6 +21,7 @@ const createOrderSchema = z.object({
 
 interface TargetBookingRecord {
   id: string;
+  user_id?: string;
   public_reference?: string;
   reference?: string;
   customer_name?: string;
@@ -32,6 +34,40 @@ interface TargetBookingRecord {
   start_hour: number;
   players?: number;
   amount_paise?: number;
+}
+
+async function resolveCouponDiscount(
+  db: ReturnType<typeof getSupabaseAdmin>,
+  code: string | undefined,
+  amountPaise: number,
+): Promise<number> {
+  if (!code) return 0;
+  const cleanCode = code.toUpperCase().trim();
+  const defaults: Record<
+    string,
+    { discount_type: "PERCENTAGE" | "FIXED"; discount_value: number; max_discount_paise?: number }
+  > = {
+    GULLY10: { discount_type: "PERCENTAGE", discount_value: 10, max_discount_paise: 50000 },
+    GULLY20: { discount_type: "PERCENTAGE", discount_value: 20, max_discount_paise: 100000 },
+    WELCOME: { discount_type: "FIXED", discount_value: 50 },
+    NIGHT10: { discount_type: "PERCENTAGE", discount_value: 10, max_discount_paise: 50000 },
+  };
+  const { data: storedCoupon } = await db
+    .from("discount_coupons")
+    .select("discount_type, discount_value, max_discount_paise, min_booking_amount")
+    .eq("code", cleanCode)
+    .eq("is_active", true)
+    .maybeSingle();
+  const coupon = storedCoupon || defaults[cleanCode];
+  if (!coupon) return 0;
+  if (storedCoupon?.min_booking_amount && amountPaise < storedCoupon.min_booking_amount * 100) {
+    return 0;
+  }
+  const discount =
+    coupon.discount_type === "PERCENTAGE"
+      ? Math.round((amountPaise * coupon.discount_value) / 100)
+      : coupon.discount_value * 100;
+  return Math.min(amountPaise, Math.min(discount, coupon.max_discount_paise || discount));
 }
 
 export async function POST(request: Request) {
@@ -61,7 +97,7 @@ export async function POST(request: Request) {
       customerPhone,
       customerEmail,
       couponCode,
-      discountPaise: providedDiscountPaise = 0,
+      discountPaise: _providedDiscountPaise,
     } = parseResult.data;
 
     const supabase = await createSupabaseServerClient();
@@ -69,7 +105,29 @@ export async function POST(request: Request) {
     const { data: authData } = await supabase.auth.getUser();
     const userId = authData?.user?.id || null;
 
+    if (bookingId && !userId) {
+      return NextResponse.json(
+        { error: { code: "UNAUTHORIZED", message: "Sign in before paying for a booking." } },
+        { status: 401 },
+      );
+    }
+
     let targetBooking: TargetBookingRecord | null = null;
+
+    const keyId = process.env["NEXT_PUBLIC_RAZORPAY_KEY_ID"] || process.env["RAZORPAY_KEY_ID"];
+    const keySecret = process.env["RAZORPAY_KEY_SECRET"];
+    if (!keyId || !keySecret || !process.env["NEXT_PUBLIC_RAZORPAY_KEY_ID"]) {
+      return NextResponse.json(
+        {
+          error: {
+            code: "PAYMENT_NOT_CONFIGURED",
+            message:
+              "Razorpay live credentials (RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET, NEXT_PUBLIC_RAZORPAY_KEY_ID) are not configured.",
+          },
+        },
+        { status: 503 },
+      );
+    }
 
     // 1. Handle Idempotency Key check
     if (idempotencyKey) {
@@ -80,13 +138,9 @@ export async function POST(request: Request) {
         .maybeSingle();
 
       if (existingPayment) {
-        const keyId =
-          process.env["NEXT_PUBLIC_RAZORPAY_KEY_ID"] ||
-          process.env["RAZORPAY_KEY_ID"] ||
-          "rzp_test_mockKeyId";
-
         return NextResponse.json({
           keyId,
+          bookingId: existingPayment.booking_id,
           orderId: existingPayment.razorpay_order_id,
           amountPaise: existingPayment.amount_paise,
           currency: existingPayment.currency,
@@ -115,66 +169,108 @@ export async function POST(request: Request) {
           { status: 404 },
         );
       }
+      if (!existing.user_id || existing.user_id !== userId) {
+        return NextResponse.json(
+          { error: { code: "FORBIDDEN", message: "This booking does not belong to you." } },
+          { status: 403 },
+        );
+      }
       targetBooking = existing as unknown as TargetBookingRecord;
     } else if (date && hour !== undefined) {
-      // Resolve venue
-      const { data: venue } = await db.from("venues").select("id").limit(1).single();
-
-      const venueId = venue?.id || "00000000-0000-0000-0000-000000000001";
-      const calculatedPrice = calculateSlotPrice(hour);
-      const finalAmountPaise = Math.max(0, calculatedPrice.amountPaise - providedDiscountPaise);
-
-      // Create 10-minute hold
-      const holdExpiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
-      const publicRef = `GUX-${Math.floor(1000 + Math.random() * 9000)}`;
-
-      const holdPayload: Record<string, unknown> = {
-        venue_id: venueId,
-        customer_name: customerName || "Guest Player",
-        customer_phone: customerPhone || "9390817811",
-        phone: customerPhone || "9390817811",
-        customer_email: customerEmail || "Gullyunitedxlv@gmail.com",
-        email: customerEmail || "Gullyunitedxlv@gmail.com",
-        booking_date: date,
-        date_key: date,
-        start_hour: hour,
-        end_hour: hour + 1,
-        players,
-        amount_paise: finalAmountPaise,
-        amount: finalAmountPaise / 100,
-        status: "HOLD",
-        payment_status: "UNPAID",
-        hold_expires_at: holdExpiresAt,
-        expires_at: holdExpiresAt,
-        public_reference: publicRef,
-        reference: publicRef,
-        notes: couponCode ? `Coupon Applied: ${couponCode}` : "Standard Booking",
-        idempotency_key: idempotencyKey || `HOLD_${publicRef}_${Date.now()}`,
-      };
-
-      if (userId) {
-        holdPayload["user_id"] = userId;
+      const emailResult = z
+        .string()
+        .trim()
+        .email()
+        .safeParse(customerEmail || "");
+      if (!customerName || customerName.trim().length < 2 || !emailResult.success) {
+        return NextResponse.json(
+          { error: { code: "INVALID_CUSTOMER", message: "Name and email are required." } },
+          { status: 422 },
+        );
       }
 
-      let { data: createdHold, error: createErr } = await db
-        .from("bookings")
-        .insert(holdPayload)
-        .select("*")
+      const phoneResult = normalizeIndianPhone(customerPhone || "");
+      if (!phoneResult.success || !phoneResult.e164) {
+        return NextResponse.json(
+          { error: { code: "INVALID_PHONE", message: phoneResult.error } },
+          { status: 422 },
+        );
+      }
+
+      const dateCheck = isBookingDateValid(date);
+      if (!dateCheck.valid) {
+        return NextResponse.json(
+          { error: { code: "INVALID_DATE", message: dateCheck.reason } },
+          { status: 422 },
+        );
+      }
+
+      const { data: venue, error: venueError } = await db
+        .from("venues")
+        .select("id")
+        .eq("name", VENUE_RULES.name)
         .single();
 
-      // If user_id column is missing in older table definition, fallback without user_id
-      if (createErr && createErr.message.includes("user_id")) {
-        delete holdPayload["user_id"];
-        const retryResult = await db.from("bookings").insert(holdPayload).select("*").single();
-        createdHold = retryResult.data;
-        createErr = retryResult.error;
+      if (venueError || !venue) {
+        return NextResponse.json(
+          { error: { code: "VENUE_UNAVAILABLE", message: "Venue is temporarily unavailable." } },
+          { status: 503 },
+        );
       }
 
-      if (createErr) {
+      const calculatedPrice = calculateSlotPrice(hour);
+      const discountPaise = await resolveCouponDiscount(
+        db,
+        couponCode,
+        calculatedPrice.amountPaise,
+      );
+      const finalAmountPaise = Math.max(0, calculatedPrice.amountPaise - discountPaise);
+
+      const publicRef = `GUX-${Math.floor(1000 + Math.random() * 9000)}`;
+      const { data: holdResult, error: holdError } = await db.rpc("create_booking_hold", {
+        p_venue_id: venue.id,
+        p_customer_name: customerName.trim(),
+        p_customer_phone: phoneResult.e164,
+        p_customer_email: emailResult.data.toLowerCase(),
+        p_players: players,
+        p_booking_date: date,
+        p_start_hour: hour,
+        p_amount_paise: finalAmountPaise,
+        p_public_reference: publicRef,
+        p_hold_duration_minutes: VENUE_RULES.holdDurationMinutes,
+      });
+
+      if (holdError) {
         return NextResponse.json(
-          { error: { code: "SLOT_HOLD_FAILED", message: createErr.message } },
-          { status: 400 },
+          {
+            error: {
+              code: holdError.code === "23505" ? "SLOT_UNAVAILABLE" : "SLOT_HOLD_FAILED",
+              message:
+                holdError.code === "23505"
+                  ? "That slot was just booked by another player. Please choose another time."
+                  : holdError.message,
+            },
+          },
+          { status: holdError.code === "23505" ? 409 : 400 },
         );
+      }
+
+      const createdBookingId = holdResult?.[0]?.booking_id || holdResult?.booking_id;
+      const { data: createdHold } = await db
+        .from("bookings")
+        .select("*")
+        .eq("id", createdBookingId)
+        .single();
+
+      if (!createdHold) {
+        return NextResponse.json(
+          { error: { code: "BOOKING_RESOLVE_FAILED", message: "Failed to resolve booking." } },
+          { status: 500 },
+        );
+      }
+
+      if (userId) {
+        await db.from("bookings").update({ user_id: userId }).eq("id", createdHold.id);
       }
 
       targetBooking = createdHold as unknown as TargetBookingRecord;
@@ -211,7 +307,7 @@ export async function POST(request: Request) {
     });
 
     // 4. Update booking with Razorpay Order ID
-    await db
+    const { error: bookingUpdateError } = await db
       .from("bookings")
       .update({
         razorpay_order_id: razorpayOrder.id,
@@ -221,6 +317,13 @@ export async function POST(request: Request) {
         updated_at: new Date().toISOString(),
       })
       .eq("id", targetBooking.id);
+
+    if (bookingUpdateError) {
+      return NextResponse.json(
+        { error: { code: "ORDER_PERSIST_FAILED", message: "Failed to link payment order." } },
+        { status: 502 },
+      );
+    }
 
     // 5. Insert payment record with status='created'
     const paymentPayload: Record<string, unknown> = {
@@ -237,19 +340,22 @@ export async function POST(request: Request) {
       paymentPayload["user_id"] = userId;
     }
 
-    const { error: payErr } = await db.from("payments").insert(paymentPayload);
+    let payErr = (await db.from("payments").insert(paymentPayload)).error;
     if (payErr && payErr.message.includes("user_id")) {
       delete paymentPayload["user_id"];
-      await db.from("payments").insert(paymentPayload);
+      payErr = (await db.from("payments").insert(paymentPayload)).error;
     }
 
-    const keyId =
-      process.env["NEXT_PUBLIC_RAZORPAY_KEY_ID"] ||
-      process.env["RAZORPAY_KEY_ID"] ||
-      "rzp_test_mockKeyId";
+    if (payErr) {
+      return NextResponse.json(
+        { error: { code: "PAYMENT_PERSIST_FAILED", message: "Failed to persist payment order." } },
+        { status: 502 },
+      );
+    }
 
     return NextResponse.json({
       keyId,
+      bookingId: targetBooking.id,
       orderId: razorpayOrder.id,
       amountPaise: razorpayOrder.amount,
       currency: razorpayOrder.currency,

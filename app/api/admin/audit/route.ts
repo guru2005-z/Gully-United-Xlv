@@ -1,8 +1,11 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase-auth-server";
+import { isAdminAuthorizationFailure, requireAdminUser } from "@/lib/admin-auth";
 
 export async function GET() {
   try {
+    const authorization = await requireAdminUser();
+    if (isAdminAuthorizationFailure(authorization)) return authorization;
     const supabase = await createSupabaseServerClient();
 
     const { data: authData } = await supabase.auth.getUser();

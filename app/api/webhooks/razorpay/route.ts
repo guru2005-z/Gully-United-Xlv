@@ -40,6 +40,7 @@ export async function POST(request: Request) {
       payload.payload?.refund?.entity;
 
     const db = getSupabaseAdmin();
+    const processingStartedAt = new Date().toISOString();
 
     // 3. Deduplication via webhook_events replay guard
     const { error: insertErr } = await db.from("webhook_events").insert({
@@ -47,12 +48,38 @@ export async function POST(request: Request) {
       event: eventName,
       payload,
       signature_valid: true,
-      processed_at: new Date().toISOString(),
+      processed_at: null,
+      processing_started_at: processingStartedAt,
     });
 
     if (insertErr && (insertErr.code === "23505" || insertErr.message?.includes("unique"))) {
-      logEvent("info", `Razorpay Webhook Replay Ignored: ${eventId}`);
-      return NextResponse.json({ duplicate: true, received: true }, { status: 200 });
+      const { data: existingEvent } = await db
+        .from("webhook_events")
+        .select("processed_at, processing_started_at")
+        .eq("razorpay_event_id", eventId)
+        .maybeSingle();
+      if (existingEvent?.processed_at) {
+        logEvent("info", `Razorpay Webhook Replay Ignored: ${eventId}`);
+        return NextResponse.json({ duplicate: true, received: true }, { status: 200 });
+      }
+
+      const staleBefore = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+      const { data: reclaimedEvent } = await db
+        .from("webhook_events")
+        .update({ processing_started_at: processingStartedAt })
+        .eq("razorpay_event_id", eventId)
+        .is("processed_at", null)
+        .lt("processing_started_at", staleBefore)
+        .select("razorpay_event_id")
+        .maybeSingle();
+
+      if (!reclaimedEvent) {
+        logEvent("info", `Razorpay Webhook Already Processing: ${eventId}`);
+        return NextResponse.json(
+          { duplicate: true, processing: true, received: true },
+          { status: 202 },
+        );
+      }
     }
 
     logEvent("info", `Razorpay Webhook Processing: ${eventName}`, {
@@ -62,11 +89,7 @@ export async function POST(request: Request) {
     });
 
     // 4. Event Processing
-    if (
-      eventName === "payment.captured" ||
-      eventName === "order.paid" ||
-      eventName === "payment.authorized"
-    ) {
+    if (eventName === "payment.captured") {
       const orderId = entity?.order_id || entity?.id;
       const paymentId = entity?.id;
       const amountPaise = entity?.amount;
@@ -105,6 +128,10 @@ export async function POST(request: Request) {
               { onConflict: "razorpay_order_id" },
             );
 
+            await db
+              .from("webhook_events")
+              .update({ processed_at: new Date().toISOString() })
+              .eq("razorpay_event_id", eventId);
             return NextResponse.json(
               { status: "amount_mismatch", received: true },
               { status: 200 },
@@ -116,7 +143,7 @@ export async function POST(request: Request) {
             .from("bookings")
             .update({
               status: "CONFIRMED",
-              payment_status: "paid",
+              payment_status: "PAID",
               razorpay_payment_id: paymentId,
               payment_id: paymentId,
               payment_method: method,
@@ -173,20 +200,44 @@ export async function POST(request: Request) {
       const refundId = entity?.id;
       const paymentId = entity?.payment_id;
       const amountPaise = entity?.amount;
+      const isProcessed = eventName === "refund.processed" || entity?.status === "processed";
 
       if (refundId) {
         await db.from("refunds").upsert(
           {
             razorpay_refund_id: refundId,
             amount_paise: amountPaise,
-            status: "processed",
+            status: isProcessed ? "processed" : "pending",
             created_at: new Date().toISOString(),
           },
           { onConflict: "razorpay_refund_id" },
         );
+
+        await db
+          .from("refund_requests")
+          .update({
+            status: isProcessed ? "PROCESSED" : "PENDING",
+            updated_at: new Date().toISOString(),
+          })
+          .eq("gateway_refund_id", refundId);
+      }
+
+      if (isProcessed && paymentId) {
+        await db
+          .from("bookings")
+          .update({
+            status: "CANCELLED",
+            payment_status: "REFUNDED",
+            updated_at: new Date().toISOString(),
+          })
+          .or(`razorpay_payment_id.eq.${paymentId},payment_id.eq.${paymentId}`);
       }
     }
 
+    await db
+      .from("webhook_events")
+      .update({ processed_at: new Date().toISOString() })
+      .eq("razorpay_event_id", eventId);
     return NextResponse.json({ status: "ok", received: true }, { status: 200 });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "Webhook handler failed.";

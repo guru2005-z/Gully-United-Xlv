@@ -1,4 +1,4 @@
-import { createSupabaseServerClient } from "@/lib/supabase-auth-server";
+import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { logEvent } from "@/lib/logger";
 
 export interface OutboxProcessResult {
@@ -11,7 +11,7 @@ export interface OutboxProcessResult {
  * Processes pending notification outbox events idempotently.
  */
 export async function processNotificationOutbox(): Promise<OutboxProcessResult> {
-  const supabase = await createSupabaseServerClient();
+  const supabase = getSupabaseAdmin();
   let deliveredCount = 0;
   let failedCount = 0;
 
@@ -39,8 +39,13 @@ export async function processNotificationOutbox(): Promise<OutboxProcessResult> 
         .eq("id", event.id);
 
       const booking = event.bookings;
-      const adminPhone = event.recipient;
-      const whatsappToken = process.env["WHATSAPP_API_TOKEN"];
+      const adminPhone = event.recipient || process.env["WHATSAPP_ADMIN_PHONE"];
+      const whatsappToken =
+        process.env["WHATSAPP_ACCESS_TOKEN"] || process.env["WHATSAPP_API_TOKEN"];
+      const whatsappApiUrl = process.env["WHATSAPP_API_URL"];
+      const displayAmountRupees = booking?.amount_paise
+        ? booking.amount_paise / 100
+        : booking?.amount || 0;
 
       logEvent("info", "Processing notification outbox event", {
         eventId: event.id,
@@ -48,26 +53,23 @@ export async function processNotificationOutbox(): Promise<OutboxProcessResult> 
         bookingRef: booking?.public_reference || booking?.reference,
       });
 
-      if (whatsappToken) {
-        // External WhatsApp Business API call if token configured
-        const waRes = await fetch(
-          "https://graph.facebook.com/v18.0/YOUR_PHONE_NUMBER_ID/messages",
-          {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${whatsappToken}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              messaging_product: "whatsapp",
-              to: adminPhone,
-              type: "text",
-              text: {
-                body: `🏏 Gully United XLV New Booking Confirmed!\nRef: ${booking?.public_reference || booking?.reference}\nDate: ${booking?.booking_date || booking?.date_key}\nHour: ${booking?.start_hour}:00\nPlayers: ${booking?.players}\nAmount: ₹${(booking?.amount_paise || booking?.amount || 0) / 100}`,
-              },
-            }),
+      if (whatsappToken && whatsappApiUrl) {
+        // External WhatsApp Business API call if token & endpoint configured
+        const waRes = await fetch(whatsappApiUrl, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${whatsappToken}`,
+            "Content-Type": "application/json",
           },
-        );
+          body: JSON.stringify({
+            messaging_product: "whatsapp",
+            to: adminPhone,
+            type: "text",
+            text: {
+              body: `🏏 Gully United XLV New Booking Confirmed!\nRef: ${booking?.public_reference || booking?.reference}\nDate: ${booking?.booking_date || booking?.date_key}\nHour: ${booking?.start_hour}:00\nPlayers: ${booking?.players}\nAmount: ₹${displayAmountRupees}`,
+            },
+          }),
+        });
 
         if (!waRes.ok) {
           throw new Error(`WhatsApp API error: ${waRes.statusText}`);

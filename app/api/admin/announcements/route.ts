@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase-auth-server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
+import { isAdminAuthorizationFailure, requireAdminUser } from "@/lib/admin-auth";
 
 interface AnnouncementStore {
   id: string;
@@ -60,6 +61,8 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
+    const authorization = await requireAdminUser();
+    if (isAdminAuthorizationFailure(authorization)) return authorization;
     const supabase = await createSupabaseServerClient();
     const db = getAdminClient(supabase);
 
@@ -116,6 +119,8 @@ export async function POST(request: Request) {
 
 export async function PUT(request: Request) {
   try {
+    const authorization = await requireAdminUser();
+    if (isAdminAuthorizationFailure(authorization)) return authorization;
     const supabase = await createSupabaseServerClient();
     const db = getAdminClient(supabase);
 
@@ -175,6 +180,8 @@ export async function PUT(request: Request) {
 
 export async function DELETE(request: Request) {
   try {
+    const authorization = await requireAdminUser();
+    if (isAdminAuthorizationFailure(authorization)) return authorization;
     const supabase = await createSupabaseServerClient();
     const db = getAdminClient(supabase);
 

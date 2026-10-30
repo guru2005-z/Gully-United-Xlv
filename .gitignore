@@ -43,4 +43,5 @@ Thumbs.db
 *.sw?
 .vscode/*
 !.vscode/extensions.json
+.vs/
 .idea/

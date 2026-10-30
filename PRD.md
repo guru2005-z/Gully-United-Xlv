@@ -6,9 +6,9 @@ Gully United XLV is a premium cricket turf and sports-entertainment venue in Kot
 
 ## 2. Current scope
 
-- Keep the current Vite/TanStack React application working.
+- Keep the current application working across public and admin routes.
 - Preserve the existing routes: home, book, venue, facilities, pricing, gallery, contact, and admin.
-- Use the current in-browser booking prototype until the later backend phase is explicitly started.
+- Support server-backed Supabase slot holds and Razorpay live checkout.
 - Do not add deployment work in this phase.
 
 ## 3. Business rules
@@ -19,31 +19,28 @@ Gully United XLV is a premium cricket turf and sports-entertainment venue in Kot
 - Night price: INR 499 from 17:00.
 - A slot is unavailable when it has a non-cancelled booking or a venue block.
 - Booking input requires name, Indian mobile number, email, player count, date, and start hour.
+- Payment capture policy: Auto-capture full slot amount immediately on Razorpay checkout (`payment_capture: 1`).
+- Cancellation and refund policy: Admin-approved refunds only via the protected admin dashboard (`START_REFUND` action); no automatic self-serve cancellation refunds.
 
 ## 4. User features
 
 - Browse venue information, facilities, gallery, pricing, and contact details.
 - Select an eligible date and available one-hour slot.
 - See the calculated price before confirming.
-- Receive a booking reference and view booking status.
-- Admin prototype can inspect bookings, cancel bookings, and block slots.
+- Pay online via Razorpay Live Checkout and receive a confirmed booking reference.
+- Admin dashboard can inspect bookings, cancel bookings, initiate partial/full Razorpay refunds, and block slots.
 
 ## 5. Later features
 
-- Next.js App Router migration.
-- Supabase persistence, authentication, RLS, and atomic availability.
-- Razorpay order creation, signature verification, webhook reconciliation, refunds.
-- WhatsApp notification to the admin after a booking is server-confirmed.
+- WhatsApp notification to the admin after a booking is server-confirmed (once provider credentials are configured).
 - Vercel deployment and production operations.
 
 ## 6. Non-functional requirements
 
 - TypeScript strictness, accessible forms, responsive layouts, keyboard navigation, and useful loading/error states.
 - No secret keys in client code.
-- Prices and availability must eventually be computed and enforced server-side.
+- Prices and availability must be computed and enforced server-side.
 
 ## 13. Needs Client Input
 
-- Confirm cancellation, refund, and payment capture policy before Razorpay work.
-- Confirm whether customer accounts are required or bookings are guest-only.
 - Confirm the WhatsApp provider, admin recipient number, and notification message template.

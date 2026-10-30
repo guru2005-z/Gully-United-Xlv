@@ -2,7 +2,10 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createSupabaseServerClient } from "@/lib/supabase-auth-server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
-import { verifyRazorpayPaymentSignature } from "@/lib/adapters/razorpay-adapter";
+import {
+  fetchRazorpayPayment,
+  verifyRazorpayPaymentSignature,
+} from "@/lib/adapters/razorpay-adapter";
 import { processNotificationOutbox } from "@/lib/workers/outbox-worker";
 
 const verifyPaymentSchema = z.object({
@@ -70,12 +73,61 @@ export async function POST(request: Request) {
     const { data: booking } = await bookingQuery.maybeSingle();
 
     if (booking) {
+      const expectedAmount = booking.amount_paise || (booking.amount ? booking.amount * 100 : 0);
+      if (booking.razorpay_order_id !== razorpay_order_id) {
+        return NextResponse.json(
+          {
+            error: {
+              code: "ORDER_MISMATCH",
+              message: "Payment order does not match this booking.",
+            },
+          },
+          { status: 400 },
+        );
+      }
+
+      const { data: razorpayPayment } = await db
+        .from("payments")
+        .select("amount_paise")
+        .eq("razorpay_order_id", razorpay_order_id)
+        .maybeSingle();
+
+      if (!razorpayPayment || razorpayPayment.amount_paise !== expectedAmount) {
+        return NextResponse.json(
+          {
+            error: {
+              code: "AMOUNT_MISMATCH",
+              message: "Payment amount does not match this booking.",
+            },
+          },
+          { status: 400 },
+        );
+      }
+
+      const providerPayment = await fetchRazorpayPayment(razorpay_payment_id);
+      if (
+        !providerPayment ||
+        providerPayment["order_id"] !== razorpay_order_id ||
+        providerPayment["amount"] !== expectedAmount ||
+        providerPayment["status"] !== "captured"
+      ) {
+        return NextResponse.json(
+          {
+            error: {
+              code: "PAYMENT_NOT_CAPTURED",
+              message: "Razorpay payment could not be confirmed.",
+            },
+          },
+          { status: 400 },
+        );
+      }
+
       // Idempotent update: if already confirmed by webhook, return clean success
       await db
         .from("bookings")
         .update({
           status: "CONFIRMED",
-          payment_status: "paid",
+          payment_status: "PAID",
           razorpay_payment_id,
           payment_id: razorpay_payment_id,
           payment_method: payment_method || "razorpay",

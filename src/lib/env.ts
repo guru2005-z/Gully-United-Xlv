@@ -23,11 +23,13 @@ export function getValidatedEnv() {
 }
 
 export function requireSupabaseAdminEnv() {
-  const url =
-    process.env["NEXT_PUBLIC_SUPABASE_URL"] ||
-    process.env["SUPABASE_URL"] ||
-    "https://wyrnexoaygoebrkgnrtv.supabase.co";
+  const url = process.env["SUPABASE_URL"] || process.env["NEXT_PUBLIC_SUPABASE_URL"] || "";
   const serviceRoleKey =
     process.env["SUPABASE_SERVICE_ROLE_KEY"] || process.env["SUPABASE_SECRET_KEY"] || "";
+
+  if (!url || !serviceRoleKey || serviceRoleKey.includes("•")) {
+    throw new Error("SUPABASE_SERVER_CONFIGURATION_MISSING");
+  }
+
   return { url, serviceRoleKey };
 }

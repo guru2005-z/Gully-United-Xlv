@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createSupabaseServerClient } from "@/lib/supabase-auth-server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
+import { isAdminAuthorizationFailure, requireAdminUser } from "@/lib/admin-auth";
+import { createRazorpayRefund } from "@/lib/adapters/razorpay-adapter";
 
 const adminActionSchema = z.object({
   action: z.enum([
@@ -39,6 +41,8 @@ function getAdminClient(
 
 export async function GET(request: Request) {
   try {
+    const authorization = await requireAdminUser();
+    if (isAdminAuthorizationFailure(authorization)) return authorization;
     const supabase = await createSupabaseServerClient();
 
     // Check user authentication
@@ -101,6 +105,8 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
+    const authorization = await requireAdminUser();
+    if (isAdminAuthorizationFailure(authorization)) return authorization;
     const supabase = await createSupabaseServerClient();
 
     // Check user authentication
@@ -431,19 +437,111 @@ export async function POST(request: Request) {
         );
       }
 
+      const { data: booking, error: bookingError } = await db
+        .from("bookings")
+        .select("id, razorpay_payment_id, payment_id, amount_paise, amount")
+        .eq("id", bookingId)
+        .single();
+
+      if (bookingError || !booking) {
+        return NextResponse.json(
+          { error: { code: "NOT_FOUND", message: "Booking not found." } },
+          { status: 404 },
+        );
+      }
+
+      const paymentId = booking.razorpay_payment_id || booking.payment_id;
+      const storedAmountPaise =
+        booking.amount_paise ?? (typeof booking.amount === "number" ? booking.amount * 100 : 0);
+      const refundAmountPaise = amountPaise ?? storedAmountPaise;
+
+      if (!paymentId || refundAmountPaise <= 0 || refundAmountPaise > storedAmountPaise) {
+        return NextResponse.json(
+          {
+            error: {
+              code: "REFUND_INVALID",
+              message: "A valid captured payment and refund amount are required.",
+            },
+          },
+          { status: 422 },
+        );
+      }
+
+      const { data: existingRefunds, error: refundLookupError } = await db
+        .from("refund_requests")
+        .select("id, amount_paise, gateway_refund_id, status")
+        .eq("booking_id", bookingId)
+        .in("status", ["PENDING", "PROCESSED"]);
+
+      if (refundLookupError) {
+        return NextResponse.json(
+          { error: { code: "REFUND_LOOKUP_FAILED", message: "Unable to check existing refunds." } },
+          { status: 500 },
+        );
+      }
+
+      const matchingRefund = existingRefunds?.find(
+        (refund) =>
+          refund.status === "PROCESSED" &&
+          refund.amount_paise === refundAmountPaise &&
+          refund.gateway_refund_id,
+      );
+      if (matchingRefund) {
+        return NextResponse.json({
+          message: "Refund was already processed.",
+          refundId: matchingRefund.gateway_refund_id,
+          status: "PROCESSED",
+          idempotent: true,
+        });
+      }
+
+      const refundedAmountPaise = (existingRefunds || []).reduce(
+        (total, refund) => total + (refund.amount_paise || 0),
+        0,
+      );
+      if (refundAmountPaise > storedAmountPaise - refundedAmountPaise) {
+        return NextResponse.json(
+          {
+            error: {
+              code: "REFUND_EXCEEDS_REMAINING",
+              message: "Refund exceeds the remaining refundable amount.",
+            },
+          },
+          { status: 409 },
+        );
+      }
+
+      let providerRefund: { id: string; amount: number; status: string };
+      try {
+        providerRefund = await createRazorpayRefund({
+          paymentId,
+          amountPaise: refundAmountPaise,
+          notes: { booking_id: bookingId, reason: reason || "Admin Initiated Refund" },
+        });
+      } catch (refundError) {
+        return NextResponse.json(
+          {
+            error: {
+              code: "REFUND_FAILED",
+              message:
+                refundError instanceof Error ? refundError.message : "Razorpay refund failed.",
+            },
+          },
+          { status: 502 },
+        );
+      }
+
+      const providerStatus =
+        providerRefund.status.toLowerCase() === "processed" ? "PROCESSED" : "PENDING";
       const { error } = await db.from("refund_requests").insert({
         booking_id: bookingId,
-        amount_paise: amountPaise || 0,
+        amount_paise: refundAmountPaise,
         reason: reason || "Admin Initiated Refund",
-        status: "PROCESSED",
+        status: providerStatus,
+        gateway_refund_id: providerRefund.id,
         requested_by: authData.user.id,
         processed_by: authData.user.id,
       });
-
-      await db
-        .from("bookings")
-        .update({ status: "CANCELLED", payment_status: "REFUNDED" })
-        .eq("id", bookingId);
 
       if (error) {
         return NextResponse.json(
@@ -452,10 +550,27 @@ export async function POST(request: Request) {
         );
       }
 
-      await logAudit("REFUND_INITIATED", bookingId, { amountPaise, reason });
+      if (providerStatus === "PROCESSED") {
+        await db
+          .from("bookings")
+          .update({ status: "CANCELLED", payment_status: "REFUNDED" })
+          .eq("id", bookingId);
+      }
+
+      await logAudit("REFUND_INITIATED", bookingId, {
+        amountPaise: refundAmountPaise,
+        reason,
+        gatewayRefundId: providerRefund.id,
+        providerStatus: providerRefund.status,
+      });
 
       return NextResponse.json({
-        message: "Refund initiated and booking status updated to REFUNDED.",
+        message:
+          providerStatus === "PROCESSED"
+            ? "Refund processed and booking status updated."
+            : "Refund submitted and is pending provider confirmation.",
+        refundId: providerRefund.id,
+        status: providerStatus,
       });
     }
 

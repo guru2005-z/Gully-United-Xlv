@@ -1,9 +1,23 @@
 import { NextResponse } from "next/server";
 import { normalizeIndianPhone } from "@/lib/auth-domain";
 import { createSupabaseAdminClient, createSupabaseServerClient } from "@/lib/supabase-auth-server";
+import { checkRateLimit, getRateLimitKey } from "@/lib/rate-limiter";
 
 export async function POST(request: Request) {
   try {
+    const rateLimit = await checkRateLimit(getRateLimitKey(request, "auth:verify-phone"), 5, 900);
+    if (!rateLimit.allowed) {
+      return NextResponse.json(
+        {
+          error: {
+            code: "RATE_LIMITED",
+            message: "Too many verification attempts. Try again later.",
+          },
+        },
+        { status: 429, headers: { "Retry-After": String(rateLimit.retryAfterSeconds) } },
+      );
+    }
+
     const body = await request.json();
     const { phone, token, type } = body;
 

@@ -31,16 +31,7 @@ export async function createRazorpayOrder(
   const keySecret = process.env["RAZORPAY_KEY_SECRET"];
 
   if (!keyId || !keySecret) {
-    // Development fallback mock order if keys are missing
-    console.warn("RAZORPAY_KEY_SECRET missing. Generating development mock order.");
-    const mockOrderId = `order_mock_${crypto.randomBytes(8).toString("hex")}`;
-    return {
-      id: mockOrderId,
-      amount: input.amountPaise,
-      currency: input.currency || "INR",
-      receipt: input.receipt,
-      status: "created",
-    };
+    throw new Error("Razorpay credentials are not configured.");
   }
 
   const authHeader = `Basic ${Buffer.from(`${keyId}:${keySecret}`).toString("base64")}`;
@@ -113,12 +104,7 @@ export async function createRazorpayOrder(
  */
 export function verifyRazorpayPaymentSignature(input: VerifyPaymentInput): boolean {
   const keySecret = process.env["RAZORPAY_KEY_SECRET"];
-  if (!keySecret) {
-    if (input.razorpay_order_id.startsWith("order_mock_")) {
-      return true;
-    }
-    return false;
-  }
+  if (!keySecret) return false;
 
   const body = `${input.razorpay_order_id}|${input.razorpay_payment_id}`;
   const expectedSignature = crypto.createHmac("sha256", keySecret).update(body).digest("hex");
@@ -171,11 +157,7 @@ export async function createRazorpayRefund(input: {
   const keySecret = process.env["RAZORPAY_KEY_SECRET"];
 
   if (!keyId || !keySecret) {
-    return {
-      id: `rfnd_mock_${crypto.randomBytes(6).toString("hex")}`,
-      amount: input.amountPaise,
-      status: "processed",
-    };
+    throw new Error("Razorpay credentials are not configured.");
   }
 
   const authHeader = `Basic ${Buffer.from(`${keyId}:${keySecret}`).toString("base64")}`;
@@ -214,6 +196,22 @@ export async function fetchRazorpayOrder(orderId: string): Promise<Record<string
 
   const authHeader = `Basic ${Buffer.from(`${keyId}:${keySecret}`).toString("base64")}`;
   const response = await fetch(`https://api.razorpay.com/v1/orders/${orderId}`, {
+    headers: { Authorization: authHeader },
+  });
+
+  if (!response.ok) return null;
+  return await response.json();
+}
+
+export async function fetchRazorpayPayment(
+  paymentId: string,
+): Promise<Record<string, unknown> | null> {
+  const keyId = process.env["RAZORPAY_KEY_ID"] || process.env["NEXT_PUBLIC_RAZORPAY_KEY_ID"];
+  const keySecret = process.env["RAZORPAY_KEY_SECRET"];
+  if (!keyId || !keySecret) return null;
+
+  const authHeader = `Basic ${Buffer.from(`${keyId}:${keySecret}`).toString("base64")}`;
+  const response = await fetch(`https://api.razorpay.com/v1/payments/${paymentId}`, {
     headers: { Authorization: authHeader },
   });
 

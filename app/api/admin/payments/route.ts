@@ -2,9 +2,12 @@ import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { createSupabaseServerClient } from "@/lib/supabase-auth-server";
 import { createRazorpayRefund, fetchRazorpayOrder } from "@/lib/adapters/razorpay-adapter";
+import { isAdminAuthorizationFailure, requireAdminUser } from "@/lib/admin-auth";
 
 export async function GET(request: Request) {
   try {
+    const authorization = await requireAdminUser();
+    if (isAdminAuthorizationFailure(authorization)) return authorization;
     const supabase = await createSupabaseServerClient();
     const { data: authData } = await supabase.auth.getUser();
 
@@ -73,6 +76,8 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
+    const authorization = await requireAdminUser();
+    if (isAdminAuthorizationFailure(authorization)) return authorization;
     const supabase = await createSupabaseServerClient();
     const { data: authData } = await supabase.auth.getUser();
 
@@ -122,6 +127,38 @@ export async function POST(request: Request) {
         return NextResponse.json(
           { error: { code: "NOT_FOUND", message: "Payment or Razorpay Payment ID not found." } },
           { status: 404 },
+        );
+      }
+
+      if (
+        payment.status !== "paid" ||
+        !Number.isInteger(amountPaise) ||
+        amountPaise <= 0 ||
+        amountPaise > payment.amount_paise
+      ) {
+        return NextResponse.json(
+          {
+            error: {
+              code: "INVALID_REFUND",
+              message: "Refund amount or payment state is invalid.",
+            },
+          },
+          { status: 400 },
+        );
+      }
+
+      const { data: existingRefund } = await db
+        .from("refunds")
+        .select("id")
+        .eq("payment_id", payment.id)
+        .in("status", ["created", "processed"])
+        .maybeSingle();
+      if (existingRefund) {
+        return NextResponse.json(
+          {
+            error: { code: "REFUND_ALREADY_EXISTS", message: "This payment already has a refund." },
+          },
+          { status: 409 },
         );
       }
 

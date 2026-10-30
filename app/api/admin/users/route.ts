@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase-auth-server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
+import { isAdminAuthorizationFailure, requireAdminUser } from "@/lib/admin-auth";
 
 const blockedPhones = new Set<string>();
 
@@ -61,6 +62,8 @@ function getAdminClient(supabase: Awaited<ReturnType<typeof createSupabaseServer
 
 export async function GET() {
   try {
+    const authorization = await requireAdminUser();
+    if (isAdminAuthorizationFailure(authorization)) return authorization;
     const supabase = await createSupabaseServerClient();
     const db = getAdminClient(supabase);
 
@@ -158,6 +161,8 @@ export async function GET() {
 
 export async function PUT(request: Request) {
   try {
+    const authorization = await requireAdminUser();
+    if (isAdminAuthorizationFailure(authorization)) return authorization;
     const supabase = await createSupabaseServerClient();
     const db = getAdminClient(supabase);
 
@@ -232,6 +237,8 @@ export async function PUT(request: Request) {
 
 export async function DELETE(request: Request) {
   try {
+    const authorization = await requireAdminUser();
+    if (isAdminAuthorizationFailure(authorization)) return authorization;
     const supabase = await createSupabaseServerClient();
     const db = getAdminClient(supabase);
 

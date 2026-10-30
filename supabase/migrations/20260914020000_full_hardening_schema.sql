@@ -7,7 +7,7 @@ BEGIN
     CREATE TYPE public.app_role AS ENUM ('admin', 'staff', 'user');
   END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'booking_status') THEN
-    CREATE TYPE public.booking_status AS ENUM ('pending', 'confirmed', 'cancelled', 'completed', 'no_show');
+    CREATE TYPE public.booking_status AS ENUM ('PENDING', 'CONFIRMED', 'CANCELLED', 'COMPLETED', 'NO_SHOW', 'BLOCKED');
   END IF;
 END $$;
 
@@ -54,7 +54,7 @@ CREATE TABLE IF NOT EXISTS public.bookings (
   players INT NOT NULL DEFAULT 12,
   amount_paise INT NOT NULL,
   amount NUMERIC(10, 2) GENERATED ALWAYS AS (amount_paise / 100.0) STORED,
-  status public.booking_status NOT NULL DEFAULT 'pending',
+  status public.booking_status NOT NULL DEFAULT 'PENDING',
   payment_status TEXT NOT NULL DEFAULT 'unpaid',
   payment_method TEXT,
   hold_expires_at TIMESTAMPTZ,
@@ -70,7 +70,7 @@ ALTER TABLE public.bookings ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES aut
 -- Hard Rule: Unique constraint preventing two active bookings for the same date + hour
 CREATE UNIQUE INDEX IF NOT EXISTS idx_active_bookings_unique_slot 
 ON public.bookings (booking_date, start_hour) 
-WHERE status IN ('pending', 'confirmed', 'completed');
+WHERE status IN ('PENDING', 'CONFIRMED', 'COMPLETED');
 
 -- 6. Create blocked_slots table
 CREATE TABLE IF NOT EXISTS public.blocked_slots (

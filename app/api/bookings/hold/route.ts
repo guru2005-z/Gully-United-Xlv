@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { createSupabaseServerClient } from "@/lib/supabase-auth-server";
+import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { calculateSlotPrice, isBookingDateValid, VENUE_RULES } from "@/lib/domain/venue";
 import { normalizeIndianPhone } from "@/lib/auth-domain";
 
@@ -60,11 +60,23 @@ export async function POST(request: Request) {
     const priceInfo = calculateSlotPrice(startHour);
     const publicRef = `GU-${Math.floor(100000 + Math.random() * 900000)}`;
 
-    const supabase = await createSupabaseServerClient();
+    const supabase = getSupabaseAdmin();
+    const { data: venue, error: venueError } = await supabase
+      .from("venues")
+      .select("id")
+      .eq("name", "Gully United XLV")
+      .single();
+
+    if (venueError || !venue) {
+      return NextResponse.json(
+        { error: { code: "VENUE_UNAVAILABLE", message: "Venue is temporarily unavailable." } },
+        { status: 503 },
+      );
+    }
 
     // Call atomic PostgreSQL function create_booking_hold
     const { data, error } = await supabase.rpc("create_booking_hold", {
-      p_venue_id: "11111111-1111-1111-1111-111111111111",
+      p_venue_id: venue.id,
       p_customer_name: customerName,
       p_customer_phone: phoneResult.e164,
       p_customer_email: customerEmail,

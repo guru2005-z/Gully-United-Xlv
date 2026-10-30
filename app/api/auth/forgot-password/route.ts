@@ -1,9 +1,22 @@
 import { NextResponse } from "next/server";
 import { normalizeIndianPhone } from "@/lib/auth-domain";
 import { createSupabaseServerClient } from "@/lib/supabase-auth-server";
+import { checkRateLimit, getRateLimitKey } from "@/lib/rate-limiter";
 
 export async function POST(request: Request) {
   try {
+    const rateLimit = await checkRateLimit(
+      getRateLimitKey(request, "auth:forgot-password"),
+      5,
+      3600,
+    );
+    if (!rateLimit.allowed) {
+      return NextResponse.json(
+        { message: "Too many recovery attempts. Try again later." },
+        { status: 429, headers: { "Retry-After": String(rateLimit.retryAfterSeconds) } },
+      );
+    }
+
     const body = await request.json();
     const { phone } = body;
 
