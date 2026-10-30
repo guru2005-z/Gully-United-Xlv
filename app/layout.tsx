@@ -3,7 +3,6 @@ import { Footer } from "@/components/Footer";
 import { Nav } from "@/components/Nav";
 import { MobileBookBar } from "@/components/sections";
 import { IntroVideoSplash } from "@/components/IntroVideoSplash";
-import { FloatingAnnouncementBanner } from "@/components/FloatingAnnouncementBanner";
 import "../src/styles.css";
 
 const siteUrl = process.env["NEXT_PUBLIC_SITE_URL"] ?? "http://localhost:3000";
@@ -61,7 +60,6 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
           dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
         />
         <IntroVideoSplash />
-        <FloatingAnnouncementBanner />
         <Nav />
         <main className="pb-20 sm:pb-0">{children}</main>
         <Footer />

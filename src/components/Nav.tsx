@@ -6,6 +6,7 @@ import { Menu, X, Phone, User as UserIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import { Logo } from "./Logo";
+import { FloatingAnnouncementBanner } from "./FloatingAnnouncementBanner";
 import { VENUE } from "@/lib/booking";
 import { createSupabaseBrowserClient } from "@/lib/supabase-auth-client";
 
@@ -70,10 +71,11 @@ export function Nav() {
       <header
         className={`fixed inset-x-0 top-0 z-50 transition-all duration-300 ${
           scrolled
-            ? "bg-[#050505]/85 backdrop-blur-2xl border-b border-white/10 shadow-2xl"
-            : "bg-transparent border-b border-transparent"
+            ? "bg-[#050505]/90 backdrop-blur-2xl border-b border-white/10 shadow-2xl"
+            : "bg-[#050505]/70 backdrop-blur-md border-b border-transparent"
         }`}
       >
+        <FloatingAnnouncementBanner />
         <nav
           aria-label="Main Navigation"
           className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3 sm:px-6 lg:px-8"

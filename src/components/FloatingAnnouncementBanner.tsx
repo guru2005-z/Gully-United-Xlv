@@ -14,11 +14,22 @@ export interface Announcement {
   is_active: boolean;
 }
 
+const DISMISS_STORAGE_KEY = "guxlv_dismissed_announcement";
+
 export function FloatingAnnouncementBanner() {
   const [activeAnnouncement, setActiveAnnouncement] = useState<Announcement | null>(null);
   const [dismissed, setDismissed] = useState(false);
 
   useEffect(() => {
+    try {
+      if (sessionStorage.getItem(DISMISS_STORAGE_KEY) === "1") {
+        setDismissed(true);
+        return;
+      }
+    } catch {
+      // Ignore storage access errors
+    }
+
     async function fetchAnnouncements() {
       try {
         const res = await fetch("/api/admin/announcements");
@@ -35,6 +46,15 @@ export function FloatingAnnouncementBanner() {
     }
     fetchAnnouncements();
   }, []);
+
+  function handleDismiss() {
+    setDismissed(true);
+    try {
+      sessionStorage.setItem(DISMISS_STORAGE_KEY, "1");
+    } catch {
+      // Ignore storage access errors
+    }
+  }
 
   if (!activeAnnouncement || dismissed) return null;
 
@@ -57,10 +77,10 @@ export function FloatingAnnouncementBanner() {
   return (
     <aside
       aria-label="Site announcement"
-      className={`relative z-50 px-4 py-2.5 text-xs sm:text-sm shadow-xl flex items-center justify-between gap-3 ${styleMap[activeAnnouncement.type]}`}
+      className={`relative z-[60] px-4 py-2 text-xs sm:text-sm shadow-md flex items-center justify-between gap-3 ${styleMap[activeAnnouncement.type]}`}
     >
       <div className="mx-auto flex items-center gap-2 text-center flex-wrap justify-center">
-        <Icon size={16} className="shrink-0" />
+        <Icon size={15} className="shrink-0" />
         <span>
           <strong className="uppercase tracking-wider">{activeAnnouncement.title}:</strong>{" "}
           {activeAnnouncement.message}
@@ -76,9 +96,10 @@ export function FloatingAnnouncementBanner() {
       </div>
 
       <button
-        onClick={() => setDismissed(true)}
+        type="button"
+        onClick={handleDismiss}
         aria-label="Dismiss banner"
-        className="p-1 rounded-full hover:bg-black/20 transition-colors shrink-0"
+        className="relative z-10 cursor-pointer p-1.5 rounded-full hover:bg-black/20 active:scale-95 transition-all shrink-0"
       >
         <X size={16} />
       </button>
