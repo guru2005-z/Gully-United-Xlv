@@ -5,7 +5,9 @@
 - Gully United XLV is a Kota cricket turf venue.
 - The visual system is black and neon lime with supplied logo and venue assets.
 - @supabase/server installed and environment variables (SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, SUPABASE_SECRET_KEY, SUPABASE_JWKS_URL) configured in .env and .env.local; supabase-server skill registered in .agents/skills/supabase-server.
-- Full Supabase Phone & Password Authentication implemented with E.164 normalization (+91), 12-char password policy, SSR clients (@supabase/ssr), API route handlers (/api/auth/*), and UI flows (/register, /verify-phone, /login, /forgot-password, /reset-password, /account/security).
+- Full Supabase Authentication implemented with:
+  - Google OAuth ("Continue with Google") across `/auth`, `/login`, `/register`, and `/admin/login` with PKCE code exchange in `/auth/callback`.
+  - Phone & Password Authentication with E.164 normalization (+91), 12-char password policy, SSR clients (@supabase/ssr), API route handlers (/api/auth/*), and UI flows (/register, /verify-phone, /login, /forgot-password, /reset-password, /account/security).
 - Razorpay integration implemented end-to-end:
   - Order creation (`/api/payments/create-order`) creates atomic slot holds, applies server-verified coupons, and creates auto-captured (`payment_capture: 1`) Razorpay orders.
   - Signature & capture verification (`/api/payments/verify`) validates HMAC-SHA256 signatures and verifies captured amount/order against Razorpay REST API.

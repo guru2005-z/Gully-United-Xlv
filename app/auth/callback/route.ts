@@ -4,7 +4,8 @@ import { createSupabaseServerClient } from "@/lib/supabase-auth-server";
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get("code");
-  const next = searchParams.get("redirect") || searchParams.get("next") || "/my-bookings";
+  const rawNext = searchParams.get("redirect") || searchParams.get("next") || "/book";
+  const next = rawNext.startsWith("/") ? rawNext : "/book";
 
   if (code) {
     const supabase = await createSupabaseServerClient();
