@@ -334,7 +334,7 @@ export default function AdminPage() {
       // ignore
     }
     showToast("Admin session ended. Locking dashboard.");
-    window.location.href = "/admin/login";
+    window.location.href = "/gullyadmin/login";
   }
 
   function showToast(message: string, type: "success" | "error" = "success") {

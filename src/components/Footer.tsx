@@ -17,7 +17,7 @@ const LINKS = [
 
 export function Footer() {
   const pathname = usePathname();
-  if (pathname?.startsWith("/admin")) return null;
+  if (pathname?.startsWith("/admin") || pathname?.startsWith("/gullyadmin")) return null;
   return (
     <footer className="relative overflow-hidden bg-[#050505] text-white">
       {/* Signature Neon Green Divider Accent Line */}
@@ -91,10 +91,6 @@ export function Footer() {
             <span>•</span>
             <Link href="/cancellation-refund" className="hover:text-[#ccff00]">
               Cancellation Policy
-            </Link>
-            <span>•</span>
-            <Link href="/admin/login" className="hover:text-[#ccff00]">
-              Admin
             </Link>
           </div>
         </div>

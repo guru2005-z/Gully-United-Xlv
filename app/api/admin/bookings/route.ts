@@ -66,7 +66,8 @@ export async function GET(request: Request) {
     const isAdminContact =
       userPhone.includes("9491501919") ||
       userPhone.includes("9390817811") ||
-      userEmail.toLowerCase().includes("gullyunitedxlv");
+      userEmail.toLowerCase().includes("gullyunitedxlv") ||
+      userEmail.toLowerCase().includes("kattaguravaiah");
 
     if (!adminProfile && !isAdminContact) {
       return NextResponse.json(
@@ -130,7 +131,8 @@ export async function POST(request: Request) {
     const isAdminContact =
       userPhone.includes("9491501919") ||
       userPhone.includes("9390817811") ||
-      userEmail.toLowerCase().includes("gullyunitedxlv");
+      userEmail.toLowerCase().includes("gullyunitedxlv") ||
+      userEmail.toLowerCase().includes("kattaguravaiah");
 
     if (!adminProfile && !isAdminContact) {
       return NextResponse.json(

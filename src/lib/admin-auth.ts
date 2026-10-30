@@ -4,8 +4,7 @@ import { createSupabaseServerClient } from "@/lib/supabase-auth-server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 
 export type AdminAuthorization =
-  | { user: User; db: ReturnType<typeof getSupabaseAdmin> }
-  | NextResponse;
+  { user: User; db: ReturnType<typeof getSupabaseAdmin> } | NextResponse;
 
 export async function requireAdminUser(): Promise<AdminAuthorization> {
   const supabase = await createSupabaseServerClient();
@@ -34,6 +33,7 @@ export async function requireAdminUser(): Promise<AdminAuthorization> {
   const isConfiguredAdmin =
     configuredEmails.includes(userEmail) ||
     userEmail.includes("gullyunitedxlv") ||
+    userEmail.includes("kattaguravaiah") ||
     userPhone.includes("9491501919") ||
     userPhone.includes("9390817811");
 

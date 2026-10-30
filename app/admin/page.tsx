@@ -1,11 +1,5 @@
-import type { Metadata } from "next";
-import AdminPage from "@/routes/admin";
+import { notFound } from "next/navigation";
 
-export const metadata: Metadata = {
-  title: "Admin Dashboard | Gully United XLV",
-  robots: { index: false, follow: false },
-};
-
-export default function AdminRoute() {
-  return <AdminPage />;
+export default function DisabledAdminPage(): never {
+  notFound();
 }
