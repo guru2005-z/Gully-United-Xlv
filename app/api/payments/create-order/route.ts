@@ -5,6 +5,7 @@ import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { createRazorpayOrder } from "@/lib/adapters/razorpay-adapter";
 import { calculateSlotPrice, isBookingDateValid, VENUE_RULES } from "@/lib/domain/venue";
 import { normalizeIndianPhone } from "@/lib/auth-domain";
+import { getStoredCoupons } from "@/lib/promo-store";
 
 const createOrderSchema = z.object({
   bookingId: z.string().uuid("Invalid booking ID format.").optional(),
@@ -37,30 +38,23 @@ interface TargetBookingRecord {
 }
 
 async function resolveCouponDiscount(
-  db: ReturnType<typeof getSupabaseAdmin>,
+  _db: ReturnType<typeof getSupabaseAdmin>,
   code: string | undefined,
   amountPaise: number,
 ): Promise<number> {
   if (!code) return 0;
   const cleanCode = code.toUpperCase().trim();
-  const defaults: Record<
-    string,
-    { discount_type: "PERCENTAGE" | "FIXED"; discount_value: number; max_discount_paise?: number }
-  > = {
-    GULLY10: { discount_type: "PERCENTAGE", discount_value: 10, max_discount_paise: 50000 },
-    GULLY20: { discount_type: "PERCENTAGE", discount_value: 20, max_discount_paise: 100000 },
-    WELCOME: { discount_type: "FIXED", discount_value: 50 },
-    NIGHT10: { discount_type: "PERCENTAGE", discount_value: 10, max_discount_paise: 50000 },
-  };
-  const { data: storedCoupon } = await db
-    .from("discount_coupons")
-    .select("discount_type, discount_value, max_discount_paise, min_booking_amount")
-    .eq("code", cleanCode)
-    .eq("is_active", true)
-    .maybeSingle();
-  const coupon = storedCoupon || defaults[cleanCode];
+  const coupons = await getStoredCoupons();
+  const coupon = coupons.find((c) => c.code.toUpperCase().trim() === cleanCode && c.is_active);
   if (!coupon) return 0;
-  if (storedCoupon?.min_booking_amount && amountPaise < storedCoupon.min_booking_amount * 100) {
+  if (
+    coupon.usage_limit !== null &&
+    coupon.usage_limit !== undefined &&
+    (coupon.used_count || 0) >= coupon.usage_limit
+  ) {
+    return 0;
+  }
+  if (coupon.min_booking_amount && amountPaise < coupon.min_booking_amount * 100) {
     return 0;
   }
   const discount =

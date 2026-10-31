@@ -15,6 +15,7 @@
   - Webhook reconciliation (`/api/webhooks/razorpay`) verifies raw-body `x-razorpay-signature`, guards against replays via `webhook_events` with stale-lock reclamation, and processes `payment.captured`, `payment.failed`, and `refund.processed` / `refund.created`.
   - Admin-approved refunds (`START_REFUND` in `/api/admin/bookings`) enforce server-side admin checks and idempotent refund creation.
 - Dynamic Admin Media Gallery & Best Plays highlights: Admins can upload photos, video clips, and best play highlights (via file picker Data URLs or external URLs), assign categories (Best Plays, Turf Arena, Floodlights, Facilities), edit/delete gallery media, and display them dynamically with interactive lightbox video player and category filter tabs on the public `/gallery` page.
+- Persistent Promo Coupons & Site Announcements (`src/lib/promo-store.ts`): Discount coupons and site announcement banners are persisted in Supabase (`booking_events` system store when `discount_coupons` / `site_announcements` tables are absent), so pausing or deleting a promo code in `/gullyadmin` immediately disables the coupon at checkout and automatically hides any top announcement banner referencing that promo code across all serverless instances.
 - Automatic Intro Sound Playback: IntroVideoSplash maintains sound active by default. It triggers the wicket hit impact sound effect (`/intro-sound.mp3`) at 34% video progress (wicket smash moment), followed immediately by the main intro theme music (`/intro1-sound.mp3`).
 
 ## Confirmed Policies

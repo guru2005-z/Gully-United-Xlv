@@ -2,32 +2,15 @@ import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase-auth-server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { isAdminAuthorizationFailure, requireAdminUser } from "@/lib/admin-auth";
+import {
+  filterAnnouncementsByActiveCoupons,
+  getStoredAnnouncements,
+  getStoredCoupons,
+  saveStoredAnnouncements,
+  type AnnouncementRecord,
+} from "@/lib/promo-store";
 
-interface AnnouncementStore {
-  id: string;
-  title: string;
-  message: string;
-  type: string;
-  link_url: string | null;
-  image_url: string | null;
-  cta_text: string | null;
-  is_active: boolean;
-  created_at: string;
-}
-
-const memoryAnnouncements: AnnouncementStore[] = [
-  {
-    id: "ann-1",
-    title: "10% OFF Night Slots (8 PM - 11 PM)",
-    message: "Use code GULLY10 at checkout for instant ₹50 discount on prime floodlit hours.",
-    type: "OFFER",
-    link_url: "/book",
-    image_url: null,
-    cta_text: "BOOK NOW",
-    is_active: true,
-    created_at: new Date().toISOString(),
-  },
-];
+export const dynamic = "force-dynamic";
 
 function getAdminClient(supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>) {
   try {
@@ -37,25 +20,25 @@ function getAdminClient(supabase: Awaited<ReturnType<typeof createSupabaseServer
   }
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    const supabase = await createSupabaseServerClient();
-    const db = getAdminClient(supabase);
+    const { searchParams } = new URL(request.url);
+    const isAdminView = searchParams.get("admin") === "1";
 
-    const { data, error } = await db
-      .from("site_announcements")
-      .select("*")
-      .order("created_at", { ascending: false });
+    const [announcements, coupons] = await Promise.all([
+      getStoredAnnouncements(),
+      getStoredCoupons(),
+    ]);
 
-    if (error) {
-      return NextResponse.json({ announcements: memoryAnnouncements });
+    if (isAdminView) {
+      return NextResponse.json({ announcements });
     }
 
-    return NextResponse.json({
-      announcements: data && data.length > 0 ? data : memoryAnnouncements,
-    });
+    // For public pages, hide any offer banner whose promo code was paused or deleted
+    const effectiveAnnouncements = filterAnnouncementsByActiveCoupons(announcements, coupons);
+    return NextResponse.json({ announcements: effectiveAnnouncements });
   } catch {
-    return NextResponse.json({ announcements: memoryAnnouncements });
+    return NextResponse.json({ announcements: [] });
   }
 }
 
@@ -71,45 +54,42 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { title, message, type, link_url, image_url, cta_text, is_active } = body;
 
+    const newAnn: AnnouncementRecord = {
+      id: `ann-${Date.now()}`,
+      title: title || "Gully United Special Announcement",
+      message: message || "",
+      type: type || "OFFER",
+      link_url: link_url || null,
+      image_url: image_url || null,
+      cta_text: cta_text || null,
+      is_active: is_active !== undefined ? Boolean(is_active) : true,
+      created_at: new Date().toISOString(),
+    };
+
     const { data, error } = await db
       .from("site_announcements")
       .insert({
-        title: title || "Gully United Special Announcement",
-        message: message || "",
-        type: type || "OFFER",
-        link_url: link_url || null,
-        image_url: image_url || null,
-        cta_text: cta_text || null,
-        is_active: is_active !== undefined ? is_active : true,
+        title: newAnn.title,
+        message: newAnn.message,
+        type: newAnn.type,
+        link_url: newAnn.link_url,
+        image_url: newAnn.image_url,
+        cta_text: newAnn.cta_text,
+        is_active: newAnn.is_active,
         created_by: authData?.user?.id || null,
       })
       .select()
       .single();
 
-    if (error) {
-      const newAnn: AnnouncementStore = {
-        id: `ann-${Date.now()}`,
-        title: title || "Gully United Special Announcement",
-        message: message || "",
-        type: type || "OFFER",
-        link_url: link_url || null,
-        image_url: image_url || null,
-        cta_text: cta_text || null,
-        is_active: is_active !== undefined ? is_active : true,
-        created_at: new Date().toISOString(),
-      };
-      memoryAnnouncements.unshift(newAnn);
-      return NextResponse.json({
-        announcement: newAnn,
-        message: "Announcement published successfully.",
-      });
-    }
+    const savedAnn = !error && data ? (data as AnnouncementRecord) : newAnn;
+    const announcements = await getStoredAnnouncements();
+    await saveStoredAnnouncements([savedAnn, ...announcements]);
 
     return NextResponse.json({
-      announcement: data,
+      announcement: savedAnn,
       message: "Announcement published successfully.",
     });
-  } catch (err) {
+  } catch {
     return NextResponse.json(
       { error: { message: "Failed to create announcement." } },
       { status: 500 },
@@ -153,21 +133,25 @@ export async function PUT(request: Request) {
     if (cta_text !== undefined) updates.cta_text = cta_text || null;
     if (is_active !== undefined) updates.is_active = Boolean(is_active);
 
-    const { error } = await db.from("site_announcements").update(updates).eq("id", id);
+    await db.from("site_announcements").update(updates).eq("id", id);
 
-    const memoryItem = memoryAnnouncements.find((a) => a.id === id);
-    if (memoryItem) {
-      if (updates.title !== undefined) memoryItem.title = updates.title;
-      if (updates.message !== undefined) memoryItem.message = updates.message;
-      if (updates.type !== undefined) memoryItem.type = updates.type;
-      if (updates.link_url !== undefined) memoryItem.link_url = updates.link_url;
-      if (updates.cta_text !== undefined) memoryItem.cta_text = updates.cta_text;
-      if (updates.is_active !== undefined) memoryItem.is_active = updates.is_active;
-    }
+    const announcements = await getStoredAnnouncements();
+    const updatedAnnouncements = announcements.map((a) => {
+      if (a.id === id) {
+        return {
+          ...a,
+          ...(updates.title !== undefined ? { title: updates.title } : {}),
+          ...(updates.message !== undefined ? { message: updates.message } : {}),
+          ...(updates.type !== undefined ? { type: updates.type } : {}),
+          ...(updates.link_url !== undefined ? { link_url: updates.link_url } : {}),
+          ...(updates.cta_text !== undefined ? { cta_text: updates.cta_text } : {}),
+          ...(updates.is_active !== undefined ? { is_active: updates.is_active } : {}),
+        };
+      }
+      return a;
+    });
 
-    if (error && !memoryItem) {
-      return NextResponse.json({ error: { message: error.message } }, { status: 400 });
-    }
+    await saveStoredAnnouncements(updatedAnnouncements);
 
     return NextResponse.json({ message: "Announcement updated successfully." });
   } catch {
@@ -195,16 +179,11 @@ export async function DELETE(request: Request) {
       );
     }
 
-    const { error } = await db.from("site_announcements").delete().eq("id", id);
+    await db.from("site_announcements").delete().eq("id", id);
 
-    const memIdx = memoryAnnouncements.findIndex((a) => a.id === id);
-    if (memIdx !== -1) {
-      memoryAnnouncements.splice(memIdx, 1);
-    }
-
-    if (error && memIdx === -1) {
-      return NextResponse.json({ error: { message: error.message } }, { status: 400 });
-    }
+    const announcements = await getStoredAnnouncements();
+    const updatedAnnouncements = announcements.filter((a) => a.id !== id);
+    await saveStoredAnnouncements(updatedAnnouncements);
 
     return NextResponse.json({ message: "Announcement deleted successfully." });
   } catch {

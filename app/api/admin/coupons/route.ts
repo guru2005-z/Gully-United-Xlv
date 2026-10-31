@@ -2,62 +2,15 @@ import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase-auth-server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { isAdminAuthorizationFailure, requireAdminUser } from "@/lib/admin-auth";
+import {
+  getStoredAnnouncements,
+  getStoredCoupons,
+  saveStoredAnnouncements,
+  saveStoredCoupons,
+  type CouponRecord,
+} from "@/lib/promo-store";
 
-interface CouponStore {
-  id: string;
-  code: string;
-  description: string | null;
-  discount_type: string;
-  discount_value: number;
-  min_booking_amount: number;
-  max_discount_paise: number | null;
-  usage_limit: number | null;
-  used_count: number;
-  is_active: boolean;
-  created_at: string;
-}
-
-const memoryCoupons: CouponStore[] = [
-  {
-    id: "cpn-1",
-    code: "GULLY10",
-    description: "10% OFF on all day/night slots",
-    discount_type: "PERCENTAGE",
-    discount_value: 10,
-    min_booking_amount: 0,
-    max_discount_paise: 50000,
-    usage_limit: 100,
-    used_count: 12,
-    is_active: true,
-    created_at: new Date().toISOString(),
-  },
-  {
-    id: "cpn-2",
-    code: "GULLY20",
-    description: "20% OFF for weekend matches",
-    discount_type: "PERCENTAGE",
-    discount_value: 20,
-    min_booking_amount: 500,
-    max_discount_paise: 100000,
-    usage_limit: 50,
-    used_count: 5,
-    is_active: true,
-    created_at: new Date(Date.now() - 86400000).toISOString(),
-  },
-  {
-    id: "cpn-3",
-    code: "WELCOME",
-    description: "Flat ₹50 OFF for first time players",
-    discount_type: "FIXED",
-    discount_value: 50,
-    min_booking_amount: 0,
-    max_discount_paise: null,
-    usage_limit: 500,
-    used_count: 89,
-    is_active: true,
-    created_at: new Date(Date.now() - 172800000).toISOString(),
-  },
-];
+export const dynamic = "force-dynamic";
 
 function getAdminClient(supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>) {
   try {
@@ -71,21 +24,12 @@ export async function GET() {
   try {
     const authorization = await requireAdminUser();
     if (isAdminAuthorizationFailure(authorization)) return authorization;
-    const supabase = await createSupabaseServerClient();
-    const db = getAdminClient(supabase);
 
-    const { data, error } = await db
-      .from("discount_coupons")
-      .select("*")
-      .order("created_at", { ascending: false });
-
-    if (error) {
-      return NextResponse.json({ coupons: memoryCoupons });
-    }
-
-    return NextResponse.json({ coupons: data && data.length > 0 ? data : memoryCoupons });
+    const coupons = await getStoredCoupons();
+    return NextResponse.json({ coupons });
   } catch {
-    return NextResponse.json({ coupons: memoryCoupons });
+    const coupons = await getStoredCoupons();
+    return NextResponse.json({ coupons });
   }
 }
 
@@ -116,45 +60,51 @@ export async function POST(request: Request) {
       );
     }
 
+    const cleanCode = String(code).toUpperCase().trim();
+    const coupons = await getStoredCoupons();
+
+    const newCoupon: CouponRecord = {
+      id: `cpn-${Date.now()}`,
+      code: cleanCode,
+      description: description || null,
+      discount_type: discount_type || "PERCENTAGE",
+      discount_value: Number(discount_value),
+      min_booking_amount: min_booking_amount ? Number(min_booking_amount) : 0,
+      max_discount_paise: max_discount_paise ? Number(max_discount_paise) : null,
+      usage_limit: usage_limit ? Number(usage_limit) : null,
+      used_count: 0,
+      is_active: true,
+      created_at: new Date().toISOString(),
+    };
+
     const { data, error } = await db
       .from("discount_coupons")
       .insert({
-        code: code.toUpperCase().trim(),
-        description: description || null,
-        discount_type: discount_type || "PERCENTAGE",
-        discount_value: Number(discount_value),
-        min_booking_amount: min_booking_amount ? Number(min_booking_amount) : 0,
-        max_discount_paise: max_discount_paise ? Number(max_discount_paise) : null,
-        usage_limit: usage_limit ? Number(usage_limit) : null,
+        code: cleanCode,
+        description: newCoupon.description,
+        discount_type: newCoupon.discount_type,
+        discount_value: newCoupon.discount_value,
+        min_booking_amount: newCoupon.min_booking_amount,
+        max_discount_paise: newCoupon.max_discount_paise,
+        usage_limit: newCoupon.usage_limit,
         is_active: true,
         created_by: authData?.user?.id || null,
       })
       .select()
       .single();
 
-    if (error) {
-      const newCoupon: CouponStore = {
-        id: `cpn-${Date.now()}`,
-        code: code.toUpperCase().trim(),
-        description: description || null,
-        discount_type: discount_type || "PERCENTAGE",
-        discount_value: Number(discount_value),
-        min_booking_amount: min_booking_amount ? Number(min_booking_amount) : 0,
-        max_discount_paise: max_discount_paise ? Number(max_discount_paise) : null,
-        usage_limit: usage_limit ? Number(usage_limit) : null,
-        used_count: 0,
-        is_active: true,
-        created_at: new Date().toISOString(),
-      };
-      memoryCoupons.unshift(newCoupon);
-      return NextResponse.json({
-        coupon: newCoupon,
-        message: "Discount coupon created successfully.",
-      });
-    }
+    const savedCoupon = !error && data ? (data as CouponRecord) : newCoupon;
+    const updatedCoupons = [
+      savedCoupon,
+      ...coupons.filter((c) => c.code.toUpperCase() !== cleanCode),
+    ];
+    await saveStoredCoupons(updatedCoupons);
 
-    return NextResponse.json({ coupon: data, message: "Discount coupon created successfully." });
-  } catch (err) {
+    return NextResponse.json({
+      coupon: savedCoupon,
+      message: "Discount coupon created successfully.",
+    });
+  } catch {
     return NextResponse.json({ error: { message: "Failed to create coupon." } }, { status: 500 });
   }
 }
@@ -200,22 +150,48 @@ export async function PUT(request: Request) {
     if (usage_limit !== undefined) updates.usage_limit = usage_limit ? Number(usage_limit) : null;
     if (is_active !== undefined) updates.is_active = Boolean(is_active);
 
-    const { error } = await db.from("discount_coupons").update(updates).eq("id", id);
+    await db.from("discount_coupons").update(updates).eq("id", id);
 
-    const memItem = memoryCoupons.find((c) => c.id === id);
-    if (memItem) {
-      if (updates.code !== undefined) memItem.code = updates.code;
-      if (updates.description !== undefined) memItem.description = updates.description;
-      if (updates.discount_type !== undefined) memItem.discount_type = updates.discount_type;
-      if (updates.discount_value !== undefined) memItem.discount_value = updates.discount_value;
-      if (updates.min_booking_amount !== undefined)
-        memItem.min_booking_amount = updates.min_booking_amount;
-      if (updates.usage_limit !== undefined) memItem.usage_limit = updates.usage_limit;
-      if (updates.is_active !== undefined) memItem.is_active = updates.is_active;
-    }
+    const coupons = await getStoredCoupons();
+    let targetCode = "";
+    const updatedCoupons = coupons.map((c) => {
+      if (c.id === id) {
+        targetCode = (updates.code || c.code).toUpperCase().trim();
+        return {
+          ...c,
+          ...(updates.code !== undefined ? { code: updates.code } : {}),
+          ...(updates.description !== undefined ? { description: updates.description } : {}),
+          ...(updates.discount_type !== undefined ? { discount_type: updates.discount_type } : {}),
+          ...(updates.discount_value !== undefined
+            ? { discount_value: updates.discount_value }
+            : {}),
+          ...(updates.min_booking_amount !== undefined
+            ? { min_booking_amount: updates.min_booking_amount }
+            : {}),
+          ...(updates.usage_limit !== undefined ? { usage_limit: updates.usage_limit } : {}),
+          ...(updates.is_active !== undefined ? { is_active: updates.is_active } : {}),
+        };
+      }
+      return c;
+    });
 
-    if (error && !memItem) {
-      return NextResponse.json({ error: { message: error.message } }, { status: 400 });
+    await saveStoredCoupons(updatedCoupons);
+
+    // Sync any announcement banner referencing this coupon code when paused or activated
+    if (targetCode && updates.is_active !== undefined) {
+      const announcements = await getStoredAnnouncements();
+      const codeRegex = new RegExp(`\\b${targetCode}\\b`, "i");
+      let changed = false;
+      const updatedAnnouncements = announcements.map((ann) => {
+        if (codeRegex.test(`${ann.title} ${ann.message}`)) {
+          changed = true;
+          return { ...ann, is_active: Boolean(updates.is_active) };
+        }
+        return ann;
+      });
+      if (changed) {
+        await saveStoredAnnouncements(updatedAnnouncements);
+      }
     }
 
     return NextResponse.json({ message: "Coupon updated successfully." });
@@ -238,15 +214,28 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: { message: "Coupon ID required." } }, { status: 400 });
     }
 
-    const { error } = await db.from("discount_coupons").delete().eq("id", id);
+    await db.from("discount_coupons").delete().eq("id", id);
 
-    const memIdx = memoryCoupons.findIndex((c) => c.id === id);
-    if (memIdx !== -1) {
-      memoryCoupons.splice(memIdx, 1);
-    }
+    const coupons = await getStoredCoupons();
+    const deletedCoupon = coupons.find((c) => c.id === id);
+    const updatedCoupons = coupons.filter((c) => c.id !== id);
+    await saveStoredCoupons(updatedCoupons);
 
-    if (error && memIdx === -1) {
-      return NextResponse.json({ error: { message: error.message } }, { status: 400 });
+    // Also deactivate any announcement banner referencing the deleted coupon code
+    if (deletedCoupon) {
+      const codeRegex = new RegExp(`\\b${deletedCoupon.code.toUpperCase().trim()}\\b`, "i");
+      const announcements = await getStoredAnnouncements();
+      let changed = false;
+      const updatedAnnouncements = announcements.map((ann) => {
+        if (codeRegex.test(`${ann.title} ${ann.message}`) && ann.is_active) {
+          changed = true;
+          return { ...ann, is_active: false };
+        }
+        return ann;
+      });
+      if (changed) {
+        await saveStoredAnnouncements(updatedAnnouncements);
+      }
     }
 
     return NextResponse.json({ message: "Coupon deleted successfully." });

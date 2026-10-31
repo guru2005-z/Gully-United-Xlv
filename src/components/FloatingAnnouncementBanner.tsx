@@ -32,12 +32,14 @@ export function FloatingAnnouncementBanner() {
 
     async function fetchAnnouncements() {
       try {
-        const res = await fetch("/api/admin/announcements");
+        const res = await fetch("/api/admin/announcements", { cache: "no-store" });
         if (res.ok) {
           const data = await res.json();
           const list = (data.announcements || []).filter((a: Announcement) => a.is_active);
           if (list.length > 0) {
             setActiveAnnouncement(list[0]);
+          } else {
+            setActiveAnnouncement(null);
           }
         }
       } catch {

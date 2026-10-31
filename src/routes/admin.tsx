@@ -500,7 +500,7 @@ export default function AdminPage() {
       setCustomers(fetchedCustomers);
 
       // Fetch Announcements
-      const annRes = await fetch("/api/admin/announcements");
+      const annRes = await fetch("/api/admin/announcements?admin=1");
       if (annRes.ok) {
         const aData = await annRes.json();
         if (aData.announcements) setAnnouncements(aData.announcements);
