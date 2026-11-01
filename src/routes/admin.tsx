@@ -326,6 +326,65 @@ export default function AdminPage() {
 
   const [savingAdminProfile, setSavingAdminProfile] = useState(false);
   const [savingAdminPassword, setSavingAdminPassword] = useState(false);
+  const [adminOtpStep, setAdminOtpStep] = useState<"idle" | "sent" | "verified">("idle");
+  const [adminOtpChannel, setAdminOtpChannel] = useState<"email" | "phone">("email");
+  const [adminOtpCode, setAdminOtpCode] = useState("");
+  const [sendingAdminOtp, setSendingAdminOtp] = useState(false);
+
+  async function handleSendAdminRecoveryOtp(channel: "email" | "phone") {
+    setSendingAdminOtp(true);
+    setAdminOtpChannel(channel);
+    const target = channel === "email" ? adminNameForm.email : adminNameForm.phone;
+    try {
+      const res = await fetch("/api/auth/forgot-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ identifier: target }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setAdminOtpStep("sent");
+        showToast(data.message || `6-digit OTP sent to ${target}`);
+      } else {
+        showToast(data.error?.message || "Failed to send OTP.", "error");
+      }
+    } catch {
+      showToast("Error sending OTP.", "error");
+    } finally {
+      setSendingAdminOtp(false);
+    }
+  }
+
+  async function handleVerifyAdminRecoveryOtp() {
+    if (adminOtpCode.trim().length < 6) {
+      showToast("Please enter the 6-digit OTP code.", "error");
+      return;
+    }
+    setSendingAdminOtp(true);
+    const target = adminOtpChannel === "email" ? adminNameForm.email : adminNameForm.phone;
+    try {
+      const res = await fetch("/api/auth/verify-phone", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          identifier: target,
+          token: adminOtpCode.trim(),
+          type: "recovery",
+        }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setAdminOtpStep("verified");
+        showToast("OTP Verified! Enter your new security password below.");
+      } else {
+        showToast(data.error?.message || "Invalid or expired OTP code.", "error");
+      }
+    } catch {
+      showToast("Failed to verify OTP.", "error");
+    } finally {
+      setSendingAdminOtp(false);
+    }
+  }
 
   async function handleLogout() {
     try {
@@ -538,7 +597,18 @@ export default function AdminPage() {
       const setRes = await fetch("/api/admin/settings");
       if (setRes.ok) {
         const sData = await setRes.json();
-        if (sData.settings) setWebsiteSettings(sData.settings);
+        if (sData.settings) {
+          setWebsiteSettings(sData.settings);
+          const profileSetting = sData.settings["ADMIN_PROFILE_NAME"] as
+            { fullName?: string; email?: string; phone?: string } | undefined;
+          if (profileSetting) {
+            setAdminNameForm((prev) => ({
+              fullName: profileSetting.fullName || prev.fullName,
+              email: profileSetting.email || prev.email,
+              phone: profileSetting.phone || prev.phone,
+            }));
+          }
+        }
       }
 
       // Fetch Razorpay Payments, Webhooks, Refunds
@@ -3111,6 +3181,61 @@ export default function AdminPage() {
                       {savingAdminPassword ? "Updating Password..." : "Change Security Password"}
                     </button>
                   </form>
+
+                  {/* FORGOT PASSWORD / OTP RECOVERY SECTION */}
+                  <div className="pt-4 border-t border-neutral-800 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[0.68rem] font-extrabold uppercase tracking-wider text-neutral-400">
+                        Forgot Password? Reset via OTP
+                      </span>
+                      {adminOtpStep === "verified" && (
+                        <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 text-[0.6rem] font-black uppercase">
+                          OTP Verified ✓
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2.5">
+                      <button
+                        type="button"
+                        disabled={sendingAdminOtp}
+                        onClick={() => handleSendAdminRecoveryOtp("email")}
+                        className="py-2.5 px-3 rounded-xl border border-neutral-700 bg-black/60 text-[0.65rem] font-bold uppercase tracking-wider text-neutral-200 hover:border-[#CCFF00] hover:text-[#CCFF00] transition-colors disabled:opacity-50"
+                      >
+                        Send OTP to Email ({adminNameForm.email.split("@")[0]})
+                      </button>
+                      <button
+                        type="button"
+                        disabled={sendingAdminOtp}
+                        onClick={() => handleSendAdminRecoveryOtp("phone")}
+                        className="py-2.5 px-3 rounded-xl border border-neutral-700 bg-black/60 text-[0.65rem] font-bold uppercase tracking-wider text-neutral-200 hover:border-[#CCFF00] hover:text-[#CCFF00] transition-colors disabled:opacity-50"
+                      >
+                        Send OTP to Phone ({adminNameForm.phone})
+                      </button>
+                    </div>
+
+                    {adminOtpStep === "sent" && (
+                      <div className="flex items-center gap-2 pt-1">
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          maxLength={6}
+                          placeholder="Enter 6-digit OTP"
+                          value={adminOtpCode}
+                          onChange={(e) => setAdminOtpCode(e.target.value)}
+                          className="flex-1 bg-black border border-[#CCFF00]/60 rounded-xl py-2 px-3 text-center text-sm font-black tracking-[0.25em] text-[#CCFF00] focus:outline-none"
+                        />
+                        <button
+                          type="button"
+                          disabled={sendingAdminOtp}
+                          onClick={handleVerifyAdminRecoveryOtp}
+                          className="py-2 px-4 rounded-xl bg-[#CCFF00] text-black text-xs font-black uppercase tracking-wider hover:bg-[#b8e600] transition-colors disabled:opacity-50"
+                        >
+                          Verify OTP
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>

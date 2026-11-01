@@ -5,7 +5,7 @@ import { checkRateLimit, getRateLimitKey } from "@/lib/rate-limiter";
 
 export async function POST(request: Request) {
   try {
-    const rateLimit = await checkRateLimit(getRateLimitKey(request, "auth:verify-phone"), 5, 900);
+    const rateLimit = await checkRateLimit(getRateLimitKey(request, "auth:verify-phone"), 8, 900);
     if (!rateLimit.allowed) {
       return NextResponse.json(
         {
@@ -19,17 +19,11 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const { phone, token, type } = body;
+    const rawTarget = String(body.identifier || body.email || body.phone || "").trim();
+    const token = String(body.token || "").trim();
+    const type = body.type;
 
-    const phoneResult = normalizeIndianPhone(phone);
-    if (!phoneResult.success || !phoneResult.e164) {
-      return NextResponse.json(
-        { error: { code: "INVALID_PHONE", message: phoneResult.error } },
-        { status: 422 },
-      );
-    }
-
-    if (!token || typeof token !== "string" || token.trim().length < 6) {
+    if (!token || token.length < 6) {
       return NextResponse.json(
         { error: { code: "INVALID_OTP", message: "Enter the 6-digit verification code." } },
         { status: 422 },
@@ -37,11 +31,67 @@ export async function POST(request: Request) {
     }
 
     const supabase = await createSupabaseServerClient();
-    const { data, error } = await supabase.auth.verifyOtp({
+
+    // 1. Verify Email OTP
+    if (rawTarget.includes("@")) {
+      const email = rawTarget.toLowerCase();
+      let verifyRes = await supabase.auth.verifyOtp({
+        email,
+        token,
+        type: "email",
+      });
+
+      if (verifyRes.error || !verifyRes.data.user) {
+        verifyRes = await supabase.auth.verifyOtp({
+          email,
+          token,
+          type: "recovery",
+        });
+      }
+
+      if (verifyRes.error || !verifyRes.data.user) {
+        return NextResponse.json(
+          {
+            error: {
+              code: "OTP_VERIFICATION_FAILED",
+              message: "That OTP code is invalid or expired. Request a new code and try again.",
+            },
+          },
+          { status: 400 },
+        );
+      }
+
+      return NextResponse.json({
+        message: "OTP verified successfully.",
+        user: verifyRes.data.user,
+        session: verifyRes.data.session,
+      });
+    }
+
+    // 2. Verify Phone SMS OTP
+    const phoneResult = normalizeIndianPhone(rawTarget);
+    if (!phoneResult.success || !phoneResult.e164) {
+      return NextResponse.json(
+        { error: { code: "INVALID_PHONE", message: phoneResult.error } },
+        { status: 422 },
+      );
+    }
+
+    let { data, error } = await supabase.auth.verifyOtp({
       phone: phoneResult.e164,
-      token: token.trim(),
+      token,
       type: type === "recovery" ? "recovery" : "sms",
     });
+
+    if (error || !data.user) {
+      const fallbackSms = await supabase.auth.verifyOtp({
+        phone: phoneResult.e164,
+        token,
+        type: "sms",
+      });
+      data = fallbackSms.data;
+      error = fallbackSms.error;
+    }
 
     if (error || !data.user) {
       return NextResponse.json(
@@ -75,7 +125,7 @@ export async function POST(request: Request) {
       user: data.user,
       session: data.session,
     });
-  } catch (err) {
+  } catch {
     return NextResponse.json(
       { error: { code: "INTERNAL_ERROR", message: "Something went wrong. Please try again." } },
       { status: 500 },

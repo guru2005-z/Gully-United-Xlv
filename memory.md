@@ -8,6 +8,7 @@
 - Full Supabase Authentication implemented with:
   - Google OAuth ("Continue with Google") across `/auth`, `/login`, `/register`, and `/gullyadmin/login` with PKCE code exchange in `/auth/callback`.
   - Private Admin Portal moved to `/gullyadmin` and `/gullyadmin/login` (public `/admin` returns 404 Not Found and the footer Admin link is removed). Restricted strictly to the owner (`Gullyunitedxlv@gmail.com`, `kattaguravaiah*`, `9390817811`, `9491501919`, or `admin_profiles`).
+  - Admin Password Recovery via 6-digit OTP to Admin Email (`Gullyunitedxlv@gmail.com`) or Admin Phone (`9491501919` / `9390817811`) available both on `/gullyadmin/login` ("Forgot Password? Get OTP") and inside the `/gullyadmin` Website Settings tab, syncing the new password across all owner admin accounts.
   - Phone & Password Authentication with E.164 normalization (+91), 12-char password policy, SSR clients (@supabase/ssr), API route handlers (/api/auth/*), and UI flows (/register, /verify-phone, /login, /forgot-password, /reset-password, /account/security).
 - Razorpay integration implemented end-to-end:
   - Order creation (`/api/payments/create-order`) creates atomic slot holds, applies server-verified coupons, and creates auto-captured (`payment_capture: 1`) Razorpay orders.

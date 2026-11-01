@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { validatePassword } from "@/lib/auth-domain";
 import { createSupabaseServerClient } from "@/lib/supabase-auth-server";
+import { getSupabaseAdmin } from "@/lib/supabase-admin";
+import { saveStoredSetting } from "@/lib/promo-store";
 
 export async function POST(request: Request) {
   try {
@@ -46,6 +48,46 @@ export async function POST(request: Request) {
         { error: { code: "UPDATE_FAILED", message: error.message } },
         { status: 400 },
       );
+    }
+
+    // Sync across all owner admin accounts if this user is the owner
+    const emailLower = (userData.user.email || "").toLowerCase();
+    const userPhone = userData.user.phone || "";
+    const isOwnerAdmin =
+      emailLower.includes("gullyunitedxlv") ||
+      emailLower.includes("kattaguravaiah") ||
+      userPhone.includes("9491501919") ||
+      userPhone.includes("9390817811");
+
+    if (isOwnerAdmin) {
+      try {
+        const adminSupabase = getSupabaseAdmin();
+        const { data: usersList } = await adminSupabase.auth.admin.listUsers();
+        const ownerAccounts = (usersList?.users || []).filter((u) => {
+          const e = (u.email || "").toLowerCase();
+          const p = u.phone || "";
+          return (
+            e.includes("gullyunitedxlv") ||
+            e.includes("kattaguravaiah") ||
+            p.includes("9491501919") ||
+            p.includes("9390817811")
+          );
+        });
+
+        for (const acc of ownerAccounts) {
+          await adminSupabase.auth.admin.updateUserById(acc.id, {
+            password: newPassword,
+            email_confirm: true,
+            phone_confirm: true,
+          });
+        }
+
+        await saveStoredSetting("ADMIN_CUSTOM_PASSWORD_SET", {
+          updatedAt: new Date().toISOString(),
+        });
+      } catch {
+        // Ignore sync errors
+      }
     }
 
     return NextResponse.json({

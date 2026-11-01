@@ -28,6 +28,7 @@ export interface AnnouncementRecord {
 
 const COUPONS_EVENT_KEY = "__system_store:coupons__";
 const ANNOUNCEMENTS_EVENT_KEY = "__system_store:announcements__";
+const SETTINGS_EVENT_KEY = "__system_store:settings__";
 
 const DEFAULT_SEED_COUPONS: CouponRecord[] = [
   {
@@ -190,6 +191,31 @@ export async function getStoredAnnouncements(): Promise<AnnouncementRecord[]> {
 export async function saveStoredAnnouncements(announcements: AnnouncementRecord[]): Promise<void> {
   fallbackAnnouncements = announcements;
   await writeEventStore(ANNOUNCEMENTS_EVENT_KEY, announcements);
+}
+
+export async function getStoredSettings(): Promise<Record<string, unknown>> {
+  try {
+    const db = getSupabaseAdmin();
+    const { data, error } = await db.from("website_settings").select("*");
+    if (!error && data && data.length > 0) {
+      const settingsMap: Record<string, unknown> = {};
+      data.forEach((row) => {
+        settingsMap[row.key] = row.value;
+      });
+      return settingsMap;
+    }
+  } catch {
+    // website_settings table may not exist; use booking_events store
+  }
+
+  const stored = await readEventStore<Record<string, unknown>>(SETTINGS_EVENT_KEY, {});
+  return stored && typeof stored === "object" ? stored : {};
+}
+
+export async function saveStoredSetting(key: string, value: unknown): Promise<void> {
+  const current = await getStoredSettings();
+  const updated = { ...current, [key]: value };
+  await writeEventStore(SETTINGS_EVENT_KEY, updated);
 }
 
 /**
