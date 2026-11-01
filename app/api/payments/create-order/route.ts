@@ -110,13 +110,13 @@ export async function POST(request: Request) {
 
     const keyId = process.env["NEXT_PUBLIC_RAZORPAY_KEY_ID"] || process.env["RAZORPAY_KEY_ID"];
     const keySecret = process.env["RAZORPAY_KEY_SECRET"];
-    if (!keyId || !keySecret || !process.env["NEXT_PUBLIC_RAZORPAY_KEY_ID"]) {
+    if (!keyId || !keySecret) {
       return NextResponse.json(
         {
           error: {
             code: "PAYMENT_NOT_CONFIGURED",
             message:
-              "Razorpay live credentials (RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET, NEXT_PUBLIC_RAZORPAY_KEY_ID) are not configured.",
+              "Razorpay credentials (RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET) are not configured.",
           },
         },
         { status: 503 },
@@ -264,7 +264,13 @@ export async function POST(request: Request) {
       }
 
       if (userId) {
-        await db.from("bookings").update({ user_id: userId }).eq("id", createdHold.id);
+        const { error: userIdErr } = await db
+          .from("bookings")
+          .update({ customer_id: userId })
+          .eq("id", createdHold.id);
+        if (userIdErr) {
+          await db.from("bookings").update({ user_id: userId }).eq("id", createdHold.id);
+        }
       }
 
       targetBooking = createdHold as unknown as TargetBookingRecord;
@@ -306,6 +312,9 @@ export async function POST(request: Request) {
       .update({
         razorpay_order_id: razorpayOrder.id,
         payment_order_id: razorpayOrder.id,
+        payment_provider: "razorpay",
+        amount_paise: amountPaise,
+        amount: Math.round(amountPaise / 100),
         status: "HOLD",
         payment_status: "UNPAID",
         updated_at: new Date().toISOString(),
@@ -340,10 +349,30 @@ export async function POST(request: Request) {
       payErr = (await db.from("payments").insert(paymentPayload)).error;
     }
 
-    if (payErr) {
+    const isMissingPaymentsTable =
+      payErr &&
+      (payErr.code === "PGRST205" ||
+        payErr.code === "42P01" ||
+        payErr.message.includes("schema cache") ||
+        payErr.message.includes("payments"));
+
+    if (payErr && !isMissingPaymentsTable) {
       return NextResponse.json(
         { error: { code: "PAYMENT_PERSIST_FAILED", message: "Failed to persist payment order." } },
         { status: 502 },
+      );
+    }
+
+    if (isMissingPaymentsTable) {
+      await db.from("booking_events").upsert(
+        {
+          booking_id: targetBooking.id,
+          provider: "razorpay",
+          event_key: razorpayOrder.id,
+          event_type: "ORDER_CREATED",
+          payload: paymentPayload,
+        },
+        { onConflict: "event_key" },
       );
     }
 

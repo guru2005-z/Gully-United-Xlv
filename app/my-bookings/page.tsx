@@ -9,11 +9,15 @@ import { createSupabaseBrowserClient } from "@/lib/supabase-auth-client";
 
 export interface UserBooking {
   id: string;
-  ref: string;
-  booking_date: string;
+  ref?: string;
+  reference?: string;
+  public_reference?: string;
+  booking_date?: string;
+  date_key?: string;
   start_hour: number;
   players: number;
   amount: number;
+  amount_paise?: number;
   status: string;
   payment_status: string;
   created_at: string;
@@ -38,14 +42,23 @@ export default function MyBookingsPage() {
       setUser(authData.user);
 
       // Fetch user's bookings
-      const { data: dbBookings } = await supabase
+      const { data: dbBookings, error: queryErr } = await supabase
         .from("bookings")
         .select("*")
-        .eq("user_id", authData.user.id)
+        .eq("customer_id", authData.user.id)
         .order("created_at", { ascending: false });
 
-      if (dbBookings) {
+      if (dbBookings && !queryErr) {
         setBookings(dbBookings as UserBooking[]);
+      } else {
+        const { data: fallbackBookings } = await supabase
+          .from("bookings")
+          .select("*")
+          .eq("user_id", authData.user.id)
+          .order("created_at", { ascending: false });
+        if (fallbackBookings) {
+          setBookings(fallbackBookings as UserBooking[]);
+        }
       }
       setLoading(false);
     }
@@ -126,7 +139,7 @@ export default function MyBookingsPage() {
                 <div className="space-y-2">
                   <div className="flex items-center gap-3">
                     <span className="font-mono text-sm font-black text-[#CCFF00]">
-                      {b.ref || "GU-SLOT"}
+                      {b.public_reference || b.reference || b.ref || "GU-SLOT"}
                     </span>
                     <span
                       className={`px-2.5 py-0.5 rounded-full text-[0.6rem] font-bold uppercase tracking-wider ${
@@ -143,7 +156,8 @@ export default function MyBookingsPage() {
 
                   <div className="flex flex-wrap items-center gap-4 text-xs text-neutral-300">
                     <span className="flex items-center gap-1.5 font-bold">
-                      <CalendarDays size={14} className="text-[#CCFF00]" /> {b.booking_date}
+                      <CalendarDays size={14} className="text-[#CCFF00]" />{" "}
+                      {b.booking_date || b.date_key}
                     </span>
                     <span className="flex items-center gap-1.5 font-bold">
                       <Clock size={14} className="text-[#CCFF00]" /> {hourStr}
@@ -155,7 +169,9 @@ export default function MyBookingsPage() {
                 </div>
 
                 <div className="text-right sm:text-right border-t sm:border-t-0 pt-3 sm:pt-0 border-neutral-800">
-                  <div className="text-2xl font-black text-[#CCFF00]">₹{b.amount}</div>
+                  <div className="text-2xl font-black text-[#CCFF00]">
+                    ₹{b.amount > 2000 ? Math.round(b.amount / 100) : b.amount}
+                  </div>
                   <div className="text-[0.65rem] font-mono uppercase text-neutral-500">
                     Payment: {b.payment_status || "UNPAID"}
                   </div>

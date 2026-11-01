@@ -30,6 +30,7 @@ export async function POST(request: Request) {
 
     const payload = JSON.parse(rawBody);
     const eventId =
+      request.headers.get("x-razorpay-event-id") ||
       payload.event_id ||
       payload.id ||
       `evt_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
@@ -42,7 +43,7 @@ export async function POST(request: Request) {
     const db = getSupabaseAdmin();
     const processingStartedAt = new Date().toISOString();
 
-    // 3. Deduplication via webhook_events replay guard
+    // 3. Deduplication via webhook_events (or booking_events fallback if webhook_events table doesn't exist)
     const { error: insertErr } = await db.from("webhook_events").insert({
       razorpay_event_id: eventId,
       event: eventName,
@@ -52,7 +53,35 @@ export async function POST(request: Request) {
       processing_started_at: processingStartedAt,
     });
 
-    if (insertErr && (insertErr.code === "23505" || insertErr.message?.includes("unique"))) {
+    const isMissingWebhookTable =
+      insertErr &&
+      (insertErr.code === "PGRST205" ||
+        insertErr.code === "42P01" ||
+        insertErr.message?.includes("schema cache") ||
+        insertErr.message?.includes("webhook_events"));
+
+    if (isMissingWebhookTable) {
+      const { error: fallbackInsertErr } = await db.from("booking_events").insert({
+        provider: "razorpay_webhook",
+        event_key: `wh_${eventId}`,
+        event_type: eventName || "WEBHOOK",
+        payload: {
+          razorpay_event_id: eventId,
+          event: eventName,
+          amount_paise: entity?.amount || 0,
+          signature_valid: true,
+          processed_at: processingStartedAt,
+        },
+      });
+
+      if (
+        fallbackInsertErr &&
+        (fallbackInsertErr.code === "23505" || fallbackInsertErr.message?.includes("unique"))
+      ) {
+        logEvent("info", `Razorpay Webhook Replay Ignored (booking_events): ${eventId}`);
+        return NextResponse.json({ duplicate: true, received: true }, { status: 200 });
+      }
+    } else if (insertErr && (insertErr.code === "23505" || insertErr.message?.includes("unique"))) {
       const { data: existingEvent } = await db
         .from("webhook_events")
         .select("processed_at, processing_started_at")
@@ -89,11 +118,13 @@ export async function POST(request: Request) {
     });
 
     // 4. Event Processing
-    if (eventName === "payment.captured") {
-      const orderId = entity?.order_id || entity?.id;
-      const paymentId = entity?.id;
-      const amountPaise = entity?.amount;
-      const method = entity?.method || "razorpay";
+    if (eventName === "payment.captured" || eventName === "order.paid") {
+      const paymentEntity = payload.payload?.payment?.entity || entity;
+      const orderEntity = payload.payload?.order?.entity;
+      const orderId = paymentEntity?.order_id || orderEntity?.id || entity?.id;
+      const paymentId = paymentEntity?.id || orderId;
+      const amountPaise = paymentEntity?.amount || orderEntity?.amount_paid || orderEntity?.amount;
+      const method = paymentEntity?.method || "razorpay";
 
       if (orderId) {
         // Find target booking
@@ -106,7 +137,9 @@ export async function POST(request: Request) {
         if (booking) {
           // 5. Amount mismatch validation check
           const expectedAmount =
-            booking.amount_paise || (booking.amount ? booking.amount * 100 : 0);
+            booking.amount_paise ||
+            (booking.amount ? (booking.amount > 2000 ? booking.amount : booking.amount * 100) : 0);
+
           if (amountPaise && expectedAmount && amountPaise !== expectedAmount) {
             logEvent("error", "Razorpay Webhook Amount Mismatch Alert", {
               orderId,
@@ -114,24 +147,12 @@ export async function POST(request: Request) {
               receivedAmount: amountPaise,
             });
 
-            await db.from("payments").upsert(
-              {
-                booking_id: booking.id,
-                razorpay_order_id: orderId,
-                razorpay_payment_id: paymentId,
-                amount_paise: amountPaise,
-                status: "failed",
-                error_code: "AMOUNT_MISMATCH",
-                error_description: `Expected ${expectedAmount} paise but received ${amountPaise} paise.`,
-                updated_at: new Date().toISOString(),
-              },
-              { onConflict: "razorpay_order_id" },
-            );
-
-            await db
-              .from("webhook_events")
-              .update({ processed_at: new Date().toISOString() })
-              .eq("razorpay_event_id", eventId);
+            if (!isMissingWebhookTable) {
+              await db
+                .from("webhook_events")
+                .update({ processed_at: new Date().toISOString() })
+                .eq("razorpay_event_id", eventId);
+            }
             return NextResponse.json(
               { status: "amount_mismatch", received: true },
               { status: 200 },
@@ -144,9 +165,12 @@ export async function POST(request: Request) {
             .update({
               status: "CONFIRMED",
               payment_status: "PAID",
+              payment_provider: "razorpay",
               razorpay_payment_id: paymentId,
               payment_id: paymentId,
               payment_method: method,
+              amount: Math.round((amountPaise || expectedAmount) / 100),
+              amount_paise: amountPaise || expectedAmount,
               updated_at: new Date().toISOString(),
             })
             .eq("id", booking.id);
@@ -154,7 +178,7 @@ export async function POST(request: Request) {
           await db.from("payments").upsert(
             {
               booking_id: booking.id,
-              user_id: booking.user_id || null,
+              user_id: booking.user_id || booking.customer_id || null,
               razorpay_order_id: orderId,
               razorpay_payment_id: paymentId,
               amount_paise: amountPaise || expectedAmount,
@@ -165,15 +189,6 @@ export async function POST(request: Request) {
             },
             { onConflict: "razorpay_order_id" },
           );
-
-          // Log security audit
-          await db.from("admin_audit_logs").insert({
-            admin_email: "system@gullyunited.com",
-            action: "WEBHOOK_PAYMENT_CONFIRMED",
-            target_type: "BOOKING",
-            target_id: booking.id,
-            details: { orderId, paymentId, amountPaise, eventName },
-          });
 
           processNotificationOutbox().catch(console.error);
         }
@@ -212,14 +227,6 @@ export async function POST(request: Request) {
           },
           { onConflict: "razorpay_refund_id" },
         );
-
-        await db
-          .from("refund_requests")
-          .update({
-            status: isProcessed ? "PROCESSED" : "PENDING",
-            updated_at: new Date().toISOString(),
-          })
-          .eq("gateway_refund_id", refundId);
       }
 
       if (isProcessed && paymentId) {
@@ -234,10 +241,13 @@ export async function POST(request: Request) {
       }
     }
 
-    await db
-      .from("webhook_events")
-      .update({ processed_at: new Date().toISOString() })
-      .eq("razorpay_event_id", eventId);
+    if (!isMissingWebhookTable) {
+      await db
+        .from("webhook_events")
+        .update({ processed_at: new Date().toISOString() })
+        .eq("razorpay_event_id", eventId);
+    }
+
     return NextResponse.json({ status: "ok", received: true }, { status: 200 });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "Webhook handler failed.";

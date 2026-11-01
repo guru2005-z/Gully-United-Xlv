@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { createSupabaseServerClient } from "@/lib/supabase-auth-server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import {
   fetchRazorpayPayment,
@@ -67,14 +66,20 @@ export async function POST(request: Request) {
     if (bookingId) {
       bookingQuery = bookingQuery.eq("id", bookingId);
     } else {
-      bookingQuery = bookingQuery.eq("razorpay_order_id", razorpay_order_id);
+      bookingQuery = bookingQuery.or(
+        `razorpay_order_id.eq.${razorpay_order_id},payment_order_id.eq.${razorpay_order_id}`,
+      );
     }
 
     const { data: booking } = await bookingQuery.maybeSingle();
 
     if (booking) {
-      const expectedAmount = booking.amount_paise || (booking.amount ? booking.amount * 100 : 0);
-      if (booking.razorpay_order_id !== razorpay_order_id) {
+      const expectedAmount =
+        booking.amount_paise ||
+        (booking.amount ? (booking.amount > 2000 ? booking.amount : booking.amount * 100) : 0);
+
+      const storedOrderId = booking.razorpay_order_id || booking.payment_order_id;
+      if (storedOrderId && storedOrderId !== razorpay_order_id) {
         return NextResponse.json(
           {
             error: {
@@ -86,13 +91,24 @@ export async function POST(request: Request) {
         );
       }
 
-      const { data: razorpayPayment } = await db
+      const { data: razorpayPayment, error: payLookupErr } = await db
         .from("payments")
         .select("amount_paise")
         .eq("razorpay_order_id", razorpay_order_id)
         .maybeSingle();
 
-      if (!razorpayPayment || razorpayPayment.amount_paise !== expectedAmount) {
+      const isMissingPaymentsTable =
+        payLookupErr &&
+        (payLookupErr.code === "PGRST205" ||
+          payLookupErr.code === "42P01" ||
+          payLookupErr.message?.includes("schema cache") ||
+          payLookupErr.message?.includes("payments"));
+
+      if (
+        !isMissingPaymentsTable &&
+        razorpayPayment &&
+        razorpayPayment.amount_paise !== expectedAmount
+      ) {
         return NextResponse.json(
           {
             error: {
@@ -122,33 +138,59 @@ export async function POST(request: Request) {
         );
       }
 
+      const resolvedMethod = (providerPayment["method"] as string) || payment_method || "razorpay";
+
       // Idempotent update: if already confirmed by webhook, return clean success
       await db
         .from("bookings")
         .update({
           status: "CONFIRMED",
           payment_status: "PAID",
+          payment_provider: "razorpay",
           razorpay_payment_id,
           payment_id: razorpay_payment_id,
-          payment_method: payment_method || "razorpay",
+          payment_method: resolvedMethod,
+          amount: Math.round(expectedAmount / 100),
+          amount_paise: expectedAmount,
           updated_at: new Date().toISOString(),
         })
         .eq("id", booking.id);
 
-      await db.from("payments").upsert(
-        {
-          booking_id: booking.id,
-          user_id: booking.user_id || null,
-          razorpay_order_id,
-          razorpay_payment_id,
-          amount_paise: booking.amount_paise || (booking.amount ? booking.amount * 100 : 0),
-          status: "paid",
-          method: payment_method || "razorpay",
-          paid_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: "razorpay_order_id" },
-      );
+      if (!isMissingPaymentsTable) {
+        await db.from("payments").upsert(
+          {
+            booking_id: booking.id,
+            user_id: booking.user_id || booking.customer_id || null,
+            razorpay_order_id,
+            razorpay_payment_id,
+            amount_paise: expectedAmount,
+            status: "paid",
+            method: resolvedMethod,
+            paid_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: "razorpay_order_id" },
+        );
+      } else {
+        await db.from("booking_events").upsert(
+          {
+            booking_id: booking.id,
+            provider: "razorpay",
+            event_key: razorpay_payment_id,
+            event_type: "PAYMENT_CAPTURED",
+            payload: {
+              booking_id: booking.id,
+              razorpay_order_id,
+              razorpay_payment_id,
+              amount_paise: expectedAmount,
+              status: "paid",
+              method: resolvedMethod,
+              paid_at: new Date().toISOString(),
+            },
+          },
+          { onConflict: "event_key" },
+        );
+      }
 
       processNotificationOutbox().catch(console.error);
 
@@ -168,7 +210,7 @@ export async function POST(request: Request) {
       message: "Payment verified successfully.",
       status: "CONFIRMED",
     });
-  } catch (err) {
+  } catch {
     return NextResponse.json(
       { error: { code: "INTERNAL_ERROR", message: "Failed to verify payment." } },
       { status: 500 },
