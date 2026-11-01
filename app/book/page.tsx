@@ -11,7 +11,7 @@ export const metadata: Metadata = {
 
 export default function BookPage() {
   return (
-    <div className="mx-auto max-w-[1400px] px-4 pb-24 pt-32 sm:px-6">
+    <div className="mx-auto max-w-[1400px] px-3 pb-16 pt-24 sm:px-6 sm:pb-24 sm:pt-32">
       <SectionHeading
         eyebrow="Booking"
         title={
@@ -21,7 +21,7 @@ export default function BookPage() {
         }
         subtitle="Choose a date, lock a one-hour slot and confirm. INR 299/hour before 5 PM, INR 499/hour from 5 PM."
       />
-      <div className="mt-10">
+      <div className="mt-6 sm:mt-10">
         <BookingWidget />
       </div>
       <HowItWorks />

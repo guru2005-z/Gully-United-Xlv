@@ -79,10 +79,10 @@ export function FloatingAnnouncementBanner() {
   return (
     <aside
       aria-label="Site announcement"
-      className={`relative z-[60] px-4 py-2 text-xs sm:text-sm shadow-md flex items-center justify-between gap-3 ${styleMap[activeAnnouncement.type]}`}
+      className={`relative z-[60] px-3 py-1.5 sm:px-4 sm:py-2 text-[0.7rem] sm:text-xs leading-snug shadow-md flex items-center justify-between gap-2 ${styleMap[activeAnnouncement.type]}`}
     >
-      <div className="mx-auto flex items-center gap-2 text-center flex-wrap justify-center">
-        <Icon size={15} className="shrink-0" />
+      <div className="mx-auto flex items-center gap-1.5 sm:gap-2 text-left sm:text-center flex-wrap sm:justify-center pr-1">
+        <Icon size={14} className="shrink-0" />
         <span>
           <strong className="uppercase tracking-wider">{activeAnnouncement.title}:</strong>{" "}
           {activeAnnouncement.message}
@@ -90,7 +90,7 @@ export function FloatingAnnouncementBanner() {
         {activeAnnouncement.link_url && (
           <Link
             href={activeAnnouncement.link_url as never}
-            className="underline underline-offset-4 font-black hover:opacity-80 transition-opacity ml-1"
+            className="underline underline-offset-4 font-black hover:opacity-80 transition-opacity ml-1 shrink-0"
           >
             {activeAnnouncement.cta_text || "Learn More →"}
           </Link>
@@ -101,9 +101,9 @@ export function FloatingAnnouncementBanner() {
         type="button"
         onClick={handleDismiss}
         aria-label="Dismiss banner"
-        className="relative z-10 cursor-pointer p-1.5 rounded-full hover:bg-black/20 active:scale-95 transition-all shrink-0"
+        className="relative z-10 cursor-pointer grid h-7 w-7 sm:h-8 sm:w-8 place-items-center rounded-full hover:bg-black/20 active:scale-95 transition-all shrink-0"
       >
-        <X size={16} />
+        <X size={15} />
       </button>
     </aside>
   );

@@ -15,7 +15,7 @@
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
+  --radius-xl: var(--radius);
   --radius-2xl: calc(var(--radius) + 8px);
   --radius-3xl: calc(var(--radius) + 12px);
   --color-background: var(--background);
@@ -71,12 +71,15 @@
 @layer base {
   * {
     border-color: var(--border);
+    -webkit-tap-highlight-color: transparent;
   }
 
   html {
     scroll-behavior: smooth;
     background-color: #050505;
     color-scheme: dark;
+    text-size-adjust: 100%;
+    -webkit-text-size-adjust: 100%;
   }
 
   body {
@@ -85,6 +88,13 @@
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
     overflow-x: hidden;
+    min-height: 100dvh;
+  }
+
+  button,
+  a,
+  [role="button"] {
+    touch-action: manipulation;
   }
 
   h1,
@@ -116,6 +126,14 @@
 }
 
 /* MORPHISM & UTILITY CLASSES */
+
+@utility no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
 
 @utility glass-dark {
   background: rgba(13, 13, 13, 0.75);
@@ -160,8 +178,8 @@
   font-weight: 800;
   letter-spacing: 0.05em;
   text-transform: uppercase;
-  min-height: 3.25rem;
-  padding: 0.9rem 1.75rem;
+  min-height: 3rem;
+  padding: 0.8rem 1.4rem;
   border-radius: 0.75rem;
   box-shadow: 0 4px 20px rgba(204, 255, 0, 0.3);
   transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
@@ -189,8 +207,8 @@
   font-weight: 700;
   letter-spacing: 0.05em;
   text-transform: uppercase;
-  min-height: 3.25rem;
-  padding: 0.9rem 1.75rem;
+  min-height: 3rem;
+  padding: 0.8rem 1.4rem;
   border-radius: 0.75rem;
   transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
   &:hover {

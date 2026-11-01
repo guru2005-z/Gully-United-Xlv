@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Footer } from "@/components/Footer";
 import { Nav } from "@/components/Nav";
 import { MobileBookBar } from "@/components/sections";
@@ -6,6 +6,14 @@ import { IntroVideoSplash } from "@/components/IntroVideoSplash";
 import "../src/styles.css";
 
 const siteUrl = process.env["NEXT_PUBLIC_SITE_URL"] ?? "http://localhost:3000";
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 5,
+  viewportFit: "cover",
+  themeColor: "#050505",
+};
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),

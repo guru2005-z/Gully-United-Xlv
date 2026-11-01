@@ -1358,21 +1358,21 @@ export default function AdminPage() {
 
       {/* Top Header Bar */}
       <header className="sticky top-0 z-40 border-b border-neutral-800/80 bg-black/90 backdrop-blur-2xl">
-        <div className="mx-auto flex max-w-[1600px] items-center justify-between gap-4 px-4 py-3 sm:px-6">
-          <div className="flex items-center gap-3">
-            <LogoMark className="h-8" />
-            <div className="flex items-center gap-2">
-              <span className="text-lg font-black tracking-tight text-white">
+        <div className="mx-auto flex max-w-[1600px] items-center justify-between gap-2 sm:gap-4 px-3 py-2.5 sm:px-6 sm:py-3">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+            <LogoMark className="h-7 sm:h-8 shrink-0" />
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="text-sm sm:text-lg font-black tracking-tight text-white truncate">
                 Gully Control Suite
               </span>
-              <span className="hidden sm:inline-block px-2 py-0.5 rounded-full bg-[#CCFF00]/10 border border-[#CCFF00]/30 text-[#CCFF00] text-[0.6rem] font-bold uppercase tracking-widest">
+              <span className="hidden sm:inline-block px-2 py-0.5 rounded-full bg-[#CCFF00]/10 border border-[#CCFF00]/30 text-[#CCFF00] text-[0.6rem] font-bold uppercase tracking-widest shrink-0">
                 v2.0 SuperAdmin
               </span>
             </div>
           </div>
 
           {/* Header Controls */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
             {/* Search Input */}
             <div className="relative hidden md:block w-64">
               <Search
@@ -1398,59 +1398,78 @@ export default function AdminPage() {
 
             <Link
               href="/"
-              className="text-xs font-extrabold uppercase tracking-[0.15em] text-neutral-400 hover:text-[#CCFF00] transition-colors"
+              className="text-[0.68rem] sm:text-xs font-extrabold uppercase tracking-[0.12em] text-neutral-400 hover:text-[#CCFF00] transition-colors"
             >
               ← Site
             </Link>
 
             <button
               onClick={handleLogout}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-red-500/30 bg-red-500/10 text-red-400 text-xs font-extrabold uppercase tracking-wider hover:bg-red-500/20 transition-colors"
+              className="inline-flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl border border-red-500/30 bg-red-500/10 text-red-400 text-[0.68rem] sm:text-xs font-extrabold uppercase tracking-wider hover:bg-red-500/20 transition-colors"
               title="Sign out of Admin Dashboard"
             >
-              <LogOut size={14} /> Sign Out
+              <LogOut size={13} /> <span className="hidden xs:inline">Sign Out</span>
             </button>
+          </div>
+        </div>
+
+        {/* Mobile Search Bar */}
+        <div className="px-3 pb-2.5 md:hidden">
+          <div className="relative">
+            <Search
+              size={14}
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500"
+            />
+            <input
+              type="text"
+              placeholder="Search booking ref, customer, phone…"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full bg-neutral-900 border border-neutral-800 rounded-xl py-2 pl-9 pr-3 text-xs font-medium text-white placeholder-neutral-500 focus:border-[#CCFF00] focus:outline-none"
+            />
           </div>
         </div>
       </header>
 
       {/* Main Admin Control Suite Layout */}
-      <div className="mx-auto max-w-[1600px] w-full px-4 pt-6 sm:px-6 flex-1 grid grid-cols-1 lg:grid-cols-[240px_1fr] gap-8">
-        {/* Navigation Sidebar */}
-        <aside className="space-y-1">
-          <div className="px-3 py-2 text-[0.65rem] font-black uppercase tracking-widest text-neutral-500">
+      <div className="mx-auto max-w-[1600px] w-full px-3 pt-4 pb-12 sm:px-6 sm:pt-6 flex-1 grid grid-cols-1 lg:grid-cols-[240px_1fr] gap-5 lg:gap-8">
+        {/* Navigation Sidebar (Horizontal Swipeable Bar on Mobile, Vertical Sidebar on Desktop) */}
+        <aside className="space-y-1 min-w-0">
+          <div className="hidden lg:block px-3 py-2 text-[0.65rem] font-black uppercase tracking-widest text-neutral-500">
             Control Navigation
           </div>
-          {[
-            { id: "overview", label: "Overview & Analytics", icon: TrendingUp },
-            { id: "bookings", label: "Bookings & Slot Control", icon: CalendarIcon },
-            { id: "calendar", label: "Ground Schedule", icon: Clock },
-            { id: "customers", label: "Customers Directory", icon: Users },
-            { id: "payments", label: "Financials & Refunds", icon: DollarSign },
-            { id: "pricing", label: "Discounts & Pricing", icon: Tag },
-            { id: "gallery", label: "Media Gallery", icon: ImageIcon },
-            { id: "announcements", label: "Site Alerts & Banners", icon: Bell },
-            { id: "feedback", label: "Reviews & Feedback", icon: MessageSquare },
-            { id: "audit", label: "Security Audit Logs", icon: ShieldCheck },
-            { id: "settings", label: "Website Settings", icon: Settings },
-          ].map((tab) => {
-            const Icon = tab.icon;
-            const isActive = activeTab === tab.id;
-            return (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id as AdminTab)}
-                className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-bold tracking-wider transition-all text-left ${
-                  isActive
-                    ? "bg-[#CCFF00] text-black shadow-lg shadow-[#CCFF00]/10 font-extrabold"
-                    : "text-neutral-400 hover:bg-neutral-900 hover:text-white"
-                }`}
-              >
-                <Icon size={16} />
-                {tab.label}
-              </button>
-            );
-          })}
+          <div className="flex lg:flex-col overflow-x-auto pb-2 lg:pb-0 gap-2 lg:gap-1 no-scrollbar snap-x">
+            {[
+              { id: "overview", label: "Overview & Analytics", icon: TrendingUp },
+              { id: "bookings", label: "Bookings & Slot Control", icon: CalendarIcon },
+              { id: "calendar", label: "Ground Schedule", icon: Clock },
+              { id: "customers", label: "Customers Directory", icon: Users },
+              { id: "payments", label: "Financials & Refunds", icon: DollarSign },
+              { id: "pricing", label: "Discounts & Pricing", icon: Tag },
+              { id: "gallery", label: "Media Gallery", icon: ImageIcon },
+              { id: "announcements", label: "Site Alerts & Banners", icon: Bell },
+              { id: "feedback", label: "Reviews & Feedback", icon: MessageSquare },
+              { id: "audit", label: "Security Audit Logs", icon: ShieldCheck },
+              { id: "settings", label: "Website Settings", icon: Settings },
+            ].map((tab) => {
+              const Icon = tab.icon;
+              const isActive = activeTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id as AdminTab)}
+                  className={`shrink-0 snap-start lg:w-full flex items-center gap-2 lg:gap-3 px-3.5 py-2.5 rounded-xl text-xs font-bold tracking-wider transition-all text-left whitespace-nowrap ${
+                    isActive
+                      ? "bg-[#CCFF00] text-black shadow-lg shadow-[#CCFF00]/10 font-extrabold"
+                      : "bg-neutral-900/70 lg:bg-transparent border border-neutral-800 lg:border-transparent text-neutral-400 hover:bg-neutral-900 hover:text-white"
+                  }`}
+                >
+                  <Icon size={15} className="shrink-0" />
+                  <span>{tab.label}</span>
+                </button>
+              );
+            })}
+          </div>
         </aside>
 
         {/* Dynamic Section Content */}

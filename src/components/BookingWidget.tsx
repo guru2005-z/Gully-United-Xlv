@@ -466,8 +466,15 @@ export function BookingWidget() {
 
         {/* Step 1 — date */}
         <fieldset>
-          <legend className="text-sm font-extrabold uppercase tracking-[0.2em]">Select date</legend>
-          <div className="mt-4 flex flex-wrap gap-2">
+          <div className="flex items-center justify-between">
+            <legend className="text-sm font-extrabold uppercase tracking-[0.2em]">
+              Select date
+            </legend>
+            <span className="text-[0.65rem] font-bold uppercase tracking-wider text-muted-foreground sm:hidden">
+              Swipe →
+            </span>
+          </div>
+          <div className="mt-4 flex overflow-x-auto pb-2 sm:pb-0 sm:flex-wrap gap-2 no-scrollbar snap-x">
             {days.map((d) => {
               const k = dateKey(d);
               const active = k === selectedDate;
@@ -479,7 +486,7 @@ export function BookingWidget() {
                     setSelectedDate(k);
                     setHour(null);
                   }}
-                  className={`rounded-xl border px-4 py-3 text-left transition-all ${
+                  className={`shrink-0 snap-start min-w-[92px] sm:min-w-0 rounded-xl border px-4 py-3 text-left transition-all ${
                     active
                       ? "border-primary bg-primary/10 text-foreground"
                       : "border-border bg-black/40 text-muted-foreground hover:border-primary/50 hover:text-foreground"
@@ -676,11 +683,11 @@ export function BookingWidget() {
               </div>
 
               {!appliedCoupon ? (
-                <div className="flex gap-2">
+                <div className="flex flex-col sm:flex-row gap-2">
                   <div className="relative flex-1">
                     <input
                       type="text"
-                      className="w-full bg-black border border-neutral-800 rounded-xl py-2.5 px-3 text-xs text-white uppercase placeholder-neutral-600 focus:border-[#CCFF00] focus:ring-1 focus:ring-[#CCFF00] focus:outline-none transition-all font-mono font-bold"
+                      className="w-full bg-black border border-neutral-800 rounded-xl py-3 sm:py-2.5 px-3 text-xs text-white uppercase placeholder-neutral-600 focus:border-[#CCFF00] focus:ring-1 focus:ring-[#CCFF00] focus:outline-none transition-all font-mono font-bold"
                       value={couponInput}
                       onChange={(e) => setCouponInput(e.target.value.toUpperCase())}
                       placeholder="ENTER COUPON CODE (e.g. GULLY10)"
@@ -690,7 +697,7 @@ export function BookingWidget() {
                     type="button"
                     onClick={handleApplyCoupon}
                     disabled={couponLoading || !couponInput.trim()}
-                    className="px-5 py-2.5 rounded-xl bg-[#CCFF00] text-black text-xs font-black uppercase tracking-wider hover:bg-[#b8e600] transition-colors disabled:opacity-50"
+                    className="w-full sm:w-auto px-5 py-3 sm:py-2.5 rounded-xl bg-[#CCFF00] text-black text-xs font-black uppercase tracking-wider hover:bg-[#b8e600] transition-colors disabled:opacity-50"
                   >
                     {couponLoading ? "Validating..." : "Apply Coupon"}
                   </button>
@@ -956,17 +963,19 @@ function PaymentModal({
       role="dialog"
       aria-modal="true"
       aria-label="Live Payment Checkout"
-      className="fixed inset-0 z-[80] grid place-items-center bg-black/85 p-4 backdrop-blur-md overflow-y-auto"
+      className="fixed inset-0 z-[80] grid place-items-center bg-black/85 p-3 sm:p-4 backdrop-blur-md overflow-y-auto"
     >
-      <div className="panel w-full max-w-lg p-6 space-y-5 border border-[#CCFF00]/30 bg-neutral-950 shadow-[0_0_50px_rgba(204,255,0,0.12)] my-8">
+      <div className="panel w-full max-w-lg max-h-[92dvh] overflow-y-auto p-4 sm:p-6 space-y-4 sm:space-y-5 border border-[#CCFF00]/30 bg-neutral-950 shadow-[0_0_50px_rgba(204,255,0,0.12)] my-auto">
         {/* Header */}
-        <div className="flex items-start justify-between gap-4 border-b border-neutral-800 pb-4">
+        <div className="flex items-start justify-between gap-3 border-b border-neutral-800 pb-3 sm:pb-4">
           <div>
-            <span className="text-[0.65rem] font-extrabold uppercase tracking-widest text-[#CCFF00] flex items-center gap-1.5">
+            <span className="text-[0.62rem] sm:text-[0.65rem] font-extrabold uppercase tracking-widest text-[#CCFF00] flex items-center gap-1.5">
               <span className="h-2 w-2 rounded-full bg-[#CCFF00] animate-pulse" />
               Gully United XLV · Live Payment Checkout
             </span>
-            <h3 className="text-2xl font-black text-white mt-0.5">Complete Slot Payment</h3>
+            <h3 className="text-xl sm:text-2xl font-black text-white mt-0.5">
+              Complete Slot Payment
+            </h3>
             <p className="text-xs text-neutral-400 mt-0.5">{slotSummary}</p>
           </div>
           <button
@@ -980,16 +989,18 @@ function PaymentModal({
         </div>
 
         {/* Amount Banner */}
-        <div className="flex items-center justify-between rounded-2xl bg-[#CCFF00]/10 border border-[#CCFF00]/30 px-4 py-3">
+        <div className="flex items-center justify-between rounded-2xl bg-[#CCFF00]/10 border border-[#CCFF00]/30 px-3.5 py-2.5 sm:px-4 sm:py-3">
           <div>
-            <div className="text-[0.65rem] font-black uppercase tracking-widest text-neutral-300">
+            <div className="text-[0.62rem] sm:text-[0.65rem] font-black uppercase tracking-widest text-neutral-300">
               Total Amount Payable
             </div>
             <div className="text-xs text-neutral-400">
               Merchant: <span className="text-white font-bold">{MERCHANT_NAME}</span>
             </div>
           </div>
-          <div className="display text-3xl font-black text-[#CCFF00]">₹{payableRupees}</div>
+          <div className="display text-2xl sm:text-3xl font-black text-[#CCFF00]">
+            ₹{payableRupees}
+          </div>
         </div>
 
         {/* Payment Method Tabs */}
@@ -1000,7 +1011,7 @@ function PaymentModal({
               setTab("upi_qr");
               setLocalError(null);
             }}
-            className={`flex items-center justify-center gap-2 rounded-lg py-2.5 text-xs font-black uppercase tracking-wider transition-all ${
+            className={`flex items-center justify-center gap-1.5 sm:gap-2 rounded-lg py-2.5 text-[0.7rem] sm:text-xs font-black uppercase tracking-wider transition-all ${
               tab === "upi_qr"
                 ? "bg-[#CCFF00] text-black shadow"
                 : "text-neutral-400 hover:text-white"
@@ -1014,7 +1025,7 @@ function PaymentModal({
               setTab("razorpay_me");
               setLocalError(null);
             }}
-            className={`flex items-center justify-center gap-2 rounded-lg py-2.5 text-xs font-black uppercase tracking-wider transition-all ${
+            className={`flex items-center justify-center gap-1.5 sm:gap-2 rounded-lg py-2.5 text-[0.7rem] sm:text-xs font-black uppercase tracking-wider transition-all ${
               tab === "razorpay_me"
                 ? "bg-[#CCFF00] text-black shadow"
                 : "text-neutral-400 hover:text-white"
@@ -1025,9 +1036,9 @@ function PaymentModal({
         </div>
 
         {tab === "upi_qr" ? (
-          <div className="space-y-4">
-            <div className="rounded-2xl border border-neutral-800 bg-black p-4 text-center space-y-3">
-              <div className="mx-auto max-w-[230px] overflow-hidden rounded-xl border-2 border-[#CCFF00]/50 bg-white p-2 shadow-lg">
+          <div className="space-y-3 sm:space-y-4">
+            <div className="rounded-2xl border border-neutral-800 bg-black p-3 sm:p-4 text-center space-y-3">
+              <div className="mx-auto max-w-[180px] sm:max-w-[220px] overflow-hidden rounded-xl border-2 border-[#CCFF00]/50 bg-white p-1.5 sm:p-2 shadow-lg">
                 <img
                   src="/paytm-qr.jpg"
                   alt="Panabaka Pradeep Paytm UPI QR Code"
@@ -1035,7 +1046,7 @@ function PaymentModal({
                 />
               </div>
               <div className="space-y-1">
-                <p className="text-xs font-black uppercase tracking-wider text-white">
+                <p className="text-[0.7rem] sm:text-xs font-black uppercase tracking-wider text-white">
                   Scan with Paytm, PhonePe, Google Pay, or Any UPI App
                 </p>
                 <div className="inline-flex items-center gap-2 rounded-lg bg-neutral-900 border border-neutral-800 px-3 py-1.5">
@@ -1054,7 +1065,7 @@ function PaymentModal({
 
               <a
                 href={upiIntentUrl}
-                className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-[#CCFF00]/40 bg-[#CCFF00]/10 py-2.5 px-4 text-xs font-black uppercase tracking-wider text-[#CCFF00] hover:bg-[#CCFF00]/20 transition-colors sm:hidden"
+                className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-[#CCFF00]/40 bg-[#CCFF00]/10 py-2.5 px-4 text-xs font-black uppercase tracking-wider text-[#CCFF00] hover:bg-[#CCFF00]/20 transition-colors"
               >
                 Open UPI App to Pay ₹{payableRupees} <ExternalLink size={14} />
               </a>

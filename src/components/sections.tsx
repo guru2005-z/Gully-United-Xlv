@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import {
   Armchair,
   Baseline,
@@ -1011,15 +1012,15 @@ export function ContactBlock() {
                 </address>
               </div>
 
-              <div className="mt-8 flex flex-wrap gap-3">
-                <a href={`tel:${VENUE.phone}`} className="btn-neon text-xs">
+              <div className="mt-8 grid grid-cols-1 sm:flex sm:flex-wrap gap-3">
+                <a href={`tel:${VENUE.phone}`} className="btn-neon text-xs w-full sm:w-auto">
                   CALL NOW →
                 </a>
                 <a
                   href={WHATSAPP_URL}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="btn-glass text-xs"
+                  className="btn-glass text-xs w-full sm:w-auto"
                 >
                   WHATSAPP →
                 </a>
@@ -1027,7 +1028,7 @@ export function ContactBlock() {
                   href={MAPS_URL}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="btn-glass text-xs"
+                  className="btn-glass text-xs w-full sm:w-auto"
                 >
                   GET DIRECTIONS →
                 </a>
@@ -1156,16 +1157,37 @@ export function HowItWorks() {
 /* ---------------- STICKY MOBILE BOOK BAR ---------------- */
 
 export function MobileBookBar() {
+  const pathname = usePathname();
+  if (
+    pathname?.startsWith("/book") ||
+    pathname?.startsWith("/admin") ||
+    pathname?.startsWith("/gullyadmin") ||
+    pathname?.startsWith("/auth") ||
+    pathname?.startsWith("/login") ||
+    pathname?.startsWith("/register")
+  ) {
+    return null;
+  }
+
   return (
-    <div className="fixed inset-x-0 bottom-0 z-40 border-t border-white/10 bg-[#050505]/95 p-3 backdrop-blur-xl sm:hidden">
-      <div className="flex gap-2">
+    <div className="fixed inset-x-0 bottom-0 z-40 border-t border-white/10 bg-[#050505]/95 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur-xl sm:hidden">
+      <div className="flex items-center gap-2">
         <Link href="/book" className="btn-neon flex-1 text-center text-xs">
           BOOK TURF NOW →
         </Link>
         <a
+          href={WHATSAPP_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label="WhatsApp Gully United XLV"
+          className="grid h-12 w-12 shrink-0 place-items-center rounded-xl border border-white/10 bg-white/5 text-[#ccff00]"
+        >
+          <MessageCircle size={18} />
+        </a>
+        <a
           href={`tel:${VENUE.phone}`}
           aria-label="Call Gully United XLV"
-          className="grid h-11 w-11 shrink-0 place-items-center rounded-xl border border-white/10 bg-white/5 text-[#ccff00]"
+          className="grid h-12 w-12 shrink-0 place-items-center rounded-xl border border-white/10 bg-white/5 text-[#ccff00]"
         >
           <Phone size={18} />
         </a>

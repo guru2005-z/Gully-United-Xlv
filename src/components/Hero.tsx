@@ -42,7 +42,7 @@ export function Hero() {
 
       <section
         ref={ref}
-        className="relative flex min-h-[100svh] flex-col justify-end overflow-hidden pb-12 pt-32"
+        className="relative flex min-h-[100svh] flex-col justify-end overflow-hidden pb-10 pt-28 sm:pb-12 sm:pt-36"
         aria-label="Gully United XLV Intro"
       >
         {/* 3D Natural Green Turf Background Canvas */}
@@ -101,39 +101,49 @@ export function Hero() {
             </p>
 
             {/* Primary & Secondary CTAs */}
-            <div className="mt-8 flex flex-wrap items-center gap-4">
-              <Link href="/book" className="btn-neon text-xs sm:text-sm">
+            <div className="mt-6 sm:mt-8 flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-3 sm:gap-4">
+              <Link href="/book" className="btn-neon text-xs sm:text-sm w-full sm:w-auto">
                 BOOK YOUR TURF →
               </Link>
 
-              <Link href="/venue" className="btn-glass text-xs sm:text-sm">
-                EXPLORE THE VENUE
-              </Link>
+              <div className="grid grid-cols-2 sm:flex items-center gap-2.5 sm:gap-4">
+                <Link
+                  href="/venue"
+                  className="btn-glass text-[0.7rem] sm:text-sm !px-3 sm:!px-6 w-full sm:w-auto"
+                >
+                  EXPLORE VENUE
+                </Link>
 
-              <button
-                type="button"
-                onClick={() => setShowVideoModal(true)}
-                className="hidden sm:inline-flex items-center gap-2 px-5 py-3.5 rounded-xl border border-white/10 bg-white/5 text-xs font-extrabold uppercase tracking-wider text-white hover:text-[#ccff00] hover:border-[#ccff00]/40 transition-all backdrop-blur-md"
-              >
-                <Play size={14} className="fill-current text-[#ccff00]" />
-                WATCH INTRO
-              </button>
+                <button
+                  type="button"
+                  onClick={() => setShowVideoModal(true)}
+                  className="inline-flex items-center justify-center gap-2 min-h-[3rem] px-3 sm:px-5 py-3 rounded-xl border border-white/15 bg-white/5 text-[0.7rem] sm:text-xs font-extrabold uppercase tracking-wider text-white hover:text-[#ccff00] hover:border-[#ccff00]/40 transition-all backdrop-blur-md w-full sm:w-auto"
+                >
+                  <Play size={14} className="fill-current text-[#ccff00] shrink-0" />
+                  <span>WATCH INTRO</span>
+                </button>
+              </div>
             </div>
 
             {/* Bento Feature Bar */}
-            <div className="mt-12 grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div className="mt-8 sm:mt-12 grid grid-cols-2 gap-2.5 sm:gap-3 sm:grid-cols-4">
               {STATS.map((s) => {
                 const IconComp = s.icon;
                 return (
-                  <div key={s.label} className="bento-card flex items-center gap-3.5 p-4">
-                    <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-[#ccff00]/30 bg-[#ccff00]/10 text-[#ccff00]">
-                      <IconComp size={18} />
+                  <div
+                    key={s.label}
+                    className="bento-card flex items-center gap-2.5 sm:gap-3.5 p-3 sm:p-4 min-w-0"
+                  >
+                    <div className="grid h-9 w-9 sm:h-10 sm:w-10 shrink-0 place-items-center rounded-xl border border-[#ccff00]/30 bg-[#ccff00]/10 text-[#ccff00]">
+                      <IconComp size={16} />
                     </div>
-                    <div>
-                      <p className="text-[0.6rem] font-extrabold uppercase tracking-widest text-gray-400">
+                    <div className="min-w-0">
+                      <p className="text-[0.55rem] sm:text-[0.6rem] font-extrabold uppercase tracking-widest text-gray-400 truncate">
                         {s.label}
                       </p>
-                      <p className="text-sm font-black text-white font-mono">{s.val}</p>
+                      <p className="text-xs sm:text-sm font-black text-white font-mono truncate">
+                        {s.val}
+                      </p>
                     </div>
                   </div>
                 );
