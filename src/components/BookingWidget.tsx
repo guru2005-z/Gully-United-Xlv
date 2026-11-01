@@ -75,6 +75,34 @@ export function BookingWidget() {
   const [couponError, setCouponError] = useState<string | null>(null);
   const [couponSuccess, setCouponSuccess] = useState<string | null>(null);
 
+  const [paymentConfig, setPaymentConfig] = useState<{
+    mode: "BOTH" | "UPI_ONLY" | "RAZORPAY_ONLY";
+    upiId: string;
+    merchantName: string;
+    razorpayMeUrl: string;
+  }>({
+    mode: "BOTH",
+    upiId: MERCHANT_UPI_ID,
+    merchantName: MERCHANT_NAME,
+    razorpayMeUrl: RAZORPAY_ME_HANDLE,
+  });
+
+  useEffect(() => {
+    fetch("/api/public/payment-config")
+      .then((r) => r.json())
+      .then((d) => {
+        if (d?.config) {
+          setPaymentConfig(d.config);
+          if (d.config.mode === "RAZORPAY_ONLY") {
+            setPayInitialTab("razorpay_me");
+          } else if (d.config.mode === "UPI_ONLY") {
+            setPayInitialTab("upi_qr");
+          }
+        }
+      })
+      .catch(() => {});
+  }, []);
+
   function toggleHour(h: number) {
     setSelectedHours((prev) =>
       prev.includes(h) ? prev.filter((x) => x !== h) : [...prev, h].sort((a, b) => a - b),
@@ -177,14 +205,15 @@ export function BookingWidget() {
     setCouponError(null);
   }
 
-  function handleOpenLivePaymentModal(tab: "upi_qr" | "razorpay_me" = "upi_qr") {
+  function handleOpenLivePaymentModal(tab?: "upi_qr" | "razorpay_me") {
     if (!user) {
       router.push("/auth?redirect=/book");
       return;
     }
     if (!validate() || selectedHours.length === 0) return;
     setErrors({});
-    setPayInitialTab(tab);
+    const effectiveTab = tab || (paymentConfig.mode === "RAZORPAY_ONLY" ? "razorpay_me" : "upi_qr");
+    setPayInitialTab(effectiveTab);
     setPayOpen(true);
   }
 
@@ -893,39 +922,59 @@ export function BookingWidget() {
         ) : (
           <>
             <div className="mt-6 flex flex-wrap gap-3">
-              <button
-                type="button"
-                onClick={() => handleOpenLivePaymentModal("upi_qr")}
-                disabled={payingRazorpay || submitting}
-                className="btn-neon arrow-slide w-full sm:w-auto justify-center"
-              >
-                <QrCode size={16} />
-                <span>
-                  {submitting
-                    ? "Confirming Slot…"
-                    : `Scan Paytm / UPI QR${finalPrice ? ` (₹${finalPrice})` : ""}`}
-                </span>{" "}
-                <span className="arrow">→</span>
-              </button>
+              {(paymentConfig.mode === "BOTH" || paymentConfig.mode === "UPI_ONLY") && (
+                <button
+                  type="button"
+                  onClick={() => handleOpenLivePaymentModal("upi_qr")}
+                  disabled={payingRazorpay || submitting}
+                  className="btn-neon arrow-slide w-full sm:w-auto justify-center"
+                >
+                  <QrCode size={16} />
+                  <span>
+                    {submitting
+                      ? "Confirming Slot…"
+                      : `Scan Paytm / UPI QR${finalPrice ? ` (₹${finalPrice})` : ""}`}
+                  </span>{" "}
+                  <span className="arrow">→</span>
+                </button>
+              )}
 
-              <button
-                type="button"
-                onClick={() => handleOpenLivePaymentModal("razorpay_me")}
-                disabled={payingRazorpay || submitting}
-                className="btn-ghost w-full sm:w-auto justify-center border-[#CCFF00]/40 text-[#CCFF00] hover:bg-[#CCFF00]/10"
-              >
-                <CreditCard size={16} />
-                <span>
-                  {payingRazorpay
-                    ? "Opening Razorpay…"
-                    : `Pay via Razorpay Live${finalPrice ? ` (₹${finalPrice})` : ""}`}
-                </span>
-              </button>
+              {(paymentConfig.mode === "BOTH" || paymentConfig.mode === "RAZORPAY_ONLY") && (
+                <button
+                  type="button"
+                  onClick={() => handleOpenLivePaymentModal("razorpay_me")}
+                  disabled={payingRazorpay || submitting}
+                  className={`w-full sm:w-auto justify-center ${
+                    paymentConfig.mode === "RAZORPAY_ONLY"
+                      ? "btn-neon"
+                      : "btn-ghost border-[#CCFF00]/40 text-[#CCFF00] hover:bg-[#CCFF00]/10"
+                  }`}
+                >
+                  <CreditCard size={16} />
+                  <span>
+                    {payingRazorpay
+                      ? "Opening Razorpay…"
+                      : `Pay via Razorpay Live${finalPrice ? ` (₹${finalPrice})` : ""}`}
+                  </span>
+                </button>
+              )}
             </div>
             <p className="mt-3 text-xs text-muted-foreground">
               Instant Live Payments accepted via{" "}
-              <strong className="text-white">Paytm / PhonePe / GPay QR ({MERCHANT_UPI_ID})</strong>{" "}
-              & <strong className="text-white">Razorpay Live (@panabakapradeep)</strong>.
+              {paymentConfig.mode !== "RAZORPAY_ONLY" && (
+                <>
+                  <strong className="text-white">
+                    Paytm / PhonePe / GPay QR ({paymentConfig.upiId})
+                  </strong>
+                  {paymentConfig.mode === "BOTH" ? " & " : "."}
+                </>
+              )}
+              {paymentConfig.mode !== "UPI_ONLY" && (
+                <strong className="text-white">
+                  Razorpay Live ({paymentConfig.razorpayMeUrl.replace("https://", "")})
+                </strong>
+              )}
+              .
             </p>
           </>
         )}
@@ -937,7 +986,14 @@ export function BookingWidget() {
           amount={finalPrice ?? price}
           baseAmount={subtotalPrice ?? price}
           gstAmount={gstAmount}
-          initialTab={payInitialTab}
+          initialTab={
+            paymentConfig.mode === "RAZORPAY_ONLY"
+              ? "razorpay_me"
+              : paymentConfig.mode === "UPI_ONLY"
+                ? "upi_qr"
+                : payInitialTab
+          }
+          paymentConfig={paymentConfig}
           slotSummary={
             selectedHours.length > 0
               ? `${prettyDate(selectedDate)} · ${formatSelectedSlots(selectedHours)}`
@@ -975,6 +1031,7 @@ function PaymentModal({
   submitting,
   onConfirmDirect,
   onPayRazorpayGateway,
+  paymentConfig,
 }: {
   onClose: () => void;
   amount: number | null;
@@ -985,8 +1042,25 @@ function PaymentModal({
   submitting: boolean;
   onConfirmDirect: (method: "razorpay_me" | "upi_qr", ref: string) => Promise<void>;
   onPayRazorpayGateway?: () => void;
+  paymentConfig?: {
+    mode: "BOTH" | "UPI_ONLY" | "RAZORPAY_ONLY";
+    upiId: string;
+    merchantName: string;
+    razorpayMeUrl: string;
+  };
 }) {
-  const [tab, setTab] = useState<"upi_qr" | "razorpay_me">(initialTab);
+  const effectiveMode = paymentConfig?.mode || "BOTH";
+  const upiId = paymentConfig?.upiId || MERCHANT_UPI_ID;
+  const merchantName = paymentConfig?.merchantName || MERCHANT_NAME;
+  const razorpayHandle = paymentConfig?.razorpayMeUrl || RAZORPAY_ME_HANDLE;
+
+  const [tab, setTab] = useState<"upi_qr" | "razorpay_me">(
+    effectiveMode === "RAZORPAY_ONLY"
+      ? "razorpay_me"
+      : effectiveMode === "UPI_ONLY"
+        ? "upi_qr"
+        : initialTab,
+  );
   const [transactionRef, setTransactionRef] = useState("");
   const [copiedUpi, setCopiedUpi] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
@@ -999,13 +1073,13 @@ function PaymentModal({
   }, [onClose]);
 
   const payableRupees = amount ?? 299;
-  const upiIntentUrl = `upi://pay?pa=${encodeURIComponent(MERCHANT_UPI_ID)}&pn=${encodeURIComponent(
-    MERCHANT_NAME,
+  const upiIntentUrl = `upi://pay?pa=${encodeURIComponent(upiId)}&pn=${encodeURIComponent(
+    merchantName,
   )}&am=${payableRupees}&cu=INR&tn=${encodeURIComponent(`Gully United XLV Turf - ${slotSummary}`)}`;
-  const razorpayMeAmountUrl = `${RAZORPAY_ME_HANDLE}/${payableRupees}`;
+  const razorpayMeAmountUrl = `${razorpayHandle.replace(/\/+$/, "")}/${payableRupees}`;
 
   const handleCopyUpi = () => {
-    navigator.clipboard.writeText(MERCHANT_UPI_ID);
+    navigator.clipboard.writeText(upiId);
     setCopiedUpi(true);
     setTimeout(() => setCopiedUpi(false), 2500);
   };
@@ -1061,7 +1135,7 @@ function PaymentModal({
               Total Payable (Incl. 3% GST)
             </div>
             <div className="text-xs text-neutral-400">
-              Merchant: <span className="text-white font-bold">{MERCHANT_NAME}</span>
+              Merchant: <span className="text-white font-bold">{merchantName}</span>
             </div>
             {baseAmount !== undefined &&
               baseAmount !== null &&
@@ -1077,37 +1151,49 @@ function PaymentModal({
           </div>
         </div>
 
-        {/* Payment Method Tabs */}
-        <div className="grid grid-cols-2 gap-2 rounded-xl bg-black p-1.5 border border-neutral-800">
-          <button
-            type="button"
-            onClick={() => {
-              setTab("upi_qr");
-              setLocalError(null);
-            }}
-            className={`flex items-center justify-center gap-1.5 sm:gap-2 rounded-lg py-2.5 text-[0.7rem] sm:text-xs font-black uppercase tracking-wider transition-all ${
-              tab === "upi_qr"
-                ? "bg-[#CCFF00] text-black shadow"
-                : "text-neutral-400 hover:text-white"
-            }`}
-          >
-            <QrCode size={15} /> Paytm / UPI QR
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setTab("razorpay_me");
-              setLocalError(null);
-            }}
-            className={`flex items-center justify-center gap-1.5 sm:gap-2 rounded-lg py-2.5 text-[0.7rem] sm:text-xs font-black uppercase tracking-wider transition-all ${
-              tab === "razorpay_me"
-                ? "bg-[#CCFF00] text-black shadow"
-                : "text-neutral-400 hover:text-white"
-            }`}
-          >
-            <CreditCard size={15} /> Razorpay Live
-          </button>
-        </div>
+        {/* Payment Method Tabs (only when BOTH methods are enabled) */}
+        {effectiveMode === "BOTH" ? (
+          <div className="grid grid-cols-2 gap-2 rounded-xl bg-black p-1.5 border border-neutral-800">
+            <button
+              type="button"
+              onClick={() => {
+                setTab("upi_qr");
+                setLocalError(null);
+              }}
+              className={`flex items-center justify-center gap-1.5 sm:gap-2 rounded-lg py-2.5 text-[0.7rem] sm:text-xs font-black uppercase tracking-wider transition-all ${
+                tab === "upi_qr"
+                  ? "bg-[#CCFF00] text-black shadow"
+                  : "text-neutral-400 hover:text-white"
+              }`}
+            >
+              <QrCode size={15} /> Paytm / UPI QR
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setTab("razorpay_me");
+                setLocalError(null);
+              }}
+              className={`flex items-center justify-center gap-1.5 sm:gap-2 rounded-lg py-2.5 text-[0.7rem] sm:text-xs font-black uppercase tracking-wider transition-all ${
+                tab === "razorpay_me"
+                  ? "bg-[#CCFF00] text-black shadow"
+                  : "text-neutral-400 hover:text-white"
+              }`}
+            >
+              <CreditCard size={15} /> Razorpay Live
+            </button>
+          </div>
+        ) : (
+          <div className="rounded-xl bg-neutral-900 border border-neutral-800 px-3 py-2 text-center">
+            <span className="text-xs font-black uppercase text-[#CCFF00] flex items-center justify-center gap-1.5">
+              {effectiveMode === "UPI_ONLY" ? <QrCode size={14} /> : <CreditCard size={14} />}
+              Active Method:{" "}
+              {effectiveMode === "UPI_ONLY"
+                ? "Paytm / UPI QR Checkout"
+                : "Official Razorpay Checkout"}
+            </span>
+          </div>
+        )}
 
         {tab === "upi_qr" ? (
           <div className="space-y-3 sm:space-y-4">
@@ -1115,7 +1201,7 @@ function PaymentModal({
               <div className="mx-auto max-w-[180px] sm:max-w-[220px] overflow-hidden rounded-xl border-2 border-[#CCFF00]/50 bg-white p-1.5 sm:p-2 shadow-lg">
                 <img
                   src="/paytm-qr.jpg"
-                  alt="Panabaka Pradeep Paytm UPI QR Code"
+                  alt={`${merchantName} Paytm UPI QR Code`}
                   className="w-full h-auto object-contain rounded-lg"
                 />
               </div>
@@ -1124,9 +1210,7 @@ function PaymentModal({
                   Scan with Paytm, PhonePe, Google Pay, or Any UPI App
                 </p>
                 <div className="inline-flex items-center gap-2 rounded-lg bg-neutral-900 border border-neutral-800 px-3 py-1.5">
-                  <span className="font-mono text-xs font-bold text-[#CCFF00]">
-                    {MERCHANT_UPI_ID}
-                  </span>
+                  <span className="font-mono text-xs font-bold text-[#CCFF00]">{upiId}</span>
                   <button
                     type="button"
                     onClick={handleCopyUpi}
@@ -1153,12 +1237,14 @@ function PaymentModal({
               </div>
               <div className="space-y-1">
                 <h4 className="text-sm font-black uppercase tracking-wider text-white">
-                  Official Razorpay.me Live Checkout
+                  Official Razorpay Live Checkout
                 </h4>
                 <p className="text-xs text-neutral-400">
                   Pay <strong className="text-[#CCFF00]">₹{payableRupees}</strong> securely via{" "}
-                  <span className="font-mono text-white">razorpay.me/@panabakapradeep</span> using
-                  UPI, Credit/Debit Cards, or NetBanking.
+                  <span className="font-mono text-white">
+                    {razorpayHandle.replace("https://", "")}
+                  </span>{" "}
+                  using UPI, Credit/Debit Cards, or NetBanking.
                 </p>
               </div>
 
@@ -1169,7 +1255,7 @@ function PaymentModal({
                 onClick={() => setRazorpayOpened(true)}
                 className="btn-neon w-full justify-center py-3 text-xs font-black uppercase tracking-wider flex items-center gap-2"
               >
-                <span>Pay ₹{payableRupees} on Razorpay.me</span>
+                <span>Pay ₹{payableRupees} on Razorpay</span>
                 <ExternalLink size={15} />
               </a>
 

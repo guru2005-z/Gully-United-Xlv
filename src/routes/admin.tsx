@@ -43,6 +43,8 @@ import {
   Edit2,
   Play,
   Upload,
+  CreditCard,
+  QrCode,
 } from "lucide-react";
 import { useEffect, useState, useMemo } from "react";
 import { LogoMark } from "@/components/Logo";
@@ -331,6 +333,19 @@ export default function AdminPage() {
   const [adminOtpCode, setAdminOtpCode] = useState("");
   const [sendingAdminOtp, setSendingAdminOtp] = useState(false);
 
+  const [paymentGatewayForm, setPaymentGatewayForm] = useState<{
+    mode: "BOTH" | "UPI_ONLY" | "RAZORPAY_ONLY";
+    upiId: string;
+    merchantName: string;
+    razorpayMeUrl: string;
+  }>({
+    mode: "BOTH",
+    upiId: "paytm.s2zq5m0@pty",
+    merchantName: "Panabaka Pradeep",
+    razorpayMeUrl: "https://razorpay.me/@panabakapradeep",
+  });
+  const [savingPaymentSettings, setSavingPaymentSettings] = useState(false);
+
   async function handleSendAdminRecoveryOtp(channel: "email" | "phone") {
     setSendingAdminOtp(true);
     setAdminOtpChannel(channel);
@@ -429,6 +444,40 @@ export default function AdminPage() {
       showToast("Failed to update Admin Name.", "error");
     } finally {
       setSavingAdminProfile(false);
+    }
+  }
+
+  async function handleUpdatePaymentSettings(e: React.FormEvent) {
+    e.preventDefault();
+    setSavingPaymentSettings(true);
+    try {
+      const res = await fetch("/api/admin/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          key: "PAYMENT_GATEWAY_CONFIG",
+          value: paymentGatewayForm,
+        }),
+      });
+
+      if (res.ok) {
+        showToast(
+          `Payment methods updated: ${
+            paymentGatewayForm.mode === "BOTH"
+              ? "Both UPI & Razorpay Active"
+              : paymentGatewayForm.mode === "UPI_ONLY"
+                ? "Only UPI QR Active"
+                : "Only Razorpay Active"
+          }!`,
+        );
+      } else {
+        const data = await res.json();
+        showToast(data.error?.message || "Failed to update payment settings.", "error");
+      }
+    } catch {
+      showToast("Failed to update payment settings.", "error");
+    } finally {
+      setSavingPaymentSettings(false);
     }
   }
 
@@ -606,6 +655,17 @@ export default function AdminPage() {
               fullName: profileSetting.fullName || prev.fullName,
               email: profileSetting.email || prev.email,
               phone: profileSetting.phone || prev.phone,
+            }));
+          }
+
+          const paymentSetting = sData.settings["PAYMENT_GATEWAY_CONFIG"] as
+            Partial<typeof paymentGatewayForm> | undefined;
+          if (paymentSetting) {
+            setPaymentGatewayForm((prev) => ({
+              mode: paymentSetting.mode || prev.mode,
+              upiId: paymentSetting.upiId || prev.upiId,
+              merchantName: paymentSetting.merchantName || prev.merchantName,
+              razorpayMeUrl: paymentSetting.razorpayMeUrl || prev.razorpayMeUrl,
             }));
           }
         }
@@ -1915,6 +1975,24 @@ export default function AdminPage() {
 
                 <div className="flex items-center gap-3">
                   <button
+                    onClick={() => {
+                      setOfflineForm({
+                        customerName: "",
+                        customerPhone: "",
+                        bookingDate: new Date().toISOString().split("T")[0]!,
+                        startHour: 18,
+                        players: 12,
+                        amountPaise: 49900,
+                        paymentMethod: "UPI",
+                      });
+                      setShowOfflineModal(true);
+                    }}
+                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-[#CCFF00] text-black text-xs font-black uppercase tracking-wider hover:bg-[#b8e600] transition-colors shadow-lg shadow-[#CCFF00]/10"
+                  >
+                    <Plus size={14} /> New Booking (Select UPI / Razorpay)
+                  </button>
+
+                  <button
                     onClick={exportCSV}
                     className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-neutral-800 text-xs font-extrabold uppercase tracking-wider text-neutral-300 hover:border-[#CCFF00] hover:text-[#CCFF00] transition-colors"
                   >
@@ -1952,6 +2030,7 @@ export default function AdminPage() {
                         <th className="px-4 py-3.5">Date</th>
                         <th className="px-4 py-3.5">Time Slot</th>
                         <th className="px-4 py-3.5">Amount</th>
+                        <th className="px-4 py-3.5">Method</th>
                         <th className="px-4 py-3.5">Status</th>
                         <th className="px-6 py-3.5 text-right">Actions</th>
                       </tr>
@@ -1960,7 +2039,7 @@ export default function AdminPage() {
                       {filteredBookings.length === 0 ? (
                         <tr>
                           <td
-                            colSpan={8}
+                            colSpan={9}
                             className="px-6 py-12 text-center text-sm text-neutral-500"
                           >
                             No booking records found for the selected filter.
@@ -1988,6 +2067,21 @@ export default function AdminPage() {
                               <td className="px-4 py-4 text-xs font-semibold">{hourStr}</td>
                               <td className="px-4 py-4 font-mono font-bold text-white">
                                 ₹{amount}
+                              </td>
+                              <td className="px-4 py-4 text-xs font-mono">
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[0.62rem] font-black uppercase bg-neutral-800 text-neutral-300 border border-neutral-700">
+                                  {b.payment_method === "razorpay" ||
+                                  b.payment_method === "razorpay_me" ||
+                                  b.payment_method === "RAZORPAY"
+                                    ? "⚡ Razorpay"
+                                    : b.payment_method === "upi" ||
+                                        b.payment_method === "upi_qr" ||
+                                        b.payment_method === "UPI"
+                                      ? "💳 Paytm / UPI"
+                                      : b.payment_method === "CASH_COUNTER"
+                                        ? "💵 Cash"
+                                        : b.payment_method || "—"}
+                                </span>
                               </td>
                               <td className="px-4 py-4">
                                 <span
@@ -2309,6 +2403,36 @@ export default function AdminPage() {
                   className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-[#CCFF00] text-black text-xs font-extrabold uppercase tracking-wider shadow-lg shadow-[#CCFF00]/10 hover:bg-[#b8e600] transition-colors"
                 >
                   <Download size={14} /> Download Financial CSV
+                </button>
+              </div>
+
+              {/* Payment Methods Control Status Banner */}
+              <div className="rounded-2xl border border-neutral-800 bg-neutral-900/60 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-lg">
+                <div className="flex items-center gap-3">
+                  <div className="h-9 w-9 rounded-xl bg-[#CCFF00]/10 text-[#CCFF00] grid place-items-center shrink-0">
+                    <CreditCard size={18} />
+                  </div>
+                  <div>
+                    <span className="text-xs font-black uppercase text-white">
+                      Active Customer Payment Methods:{" "}
+                      <span className="text-[#CCFF00]">
+                        {paymentGatewayForm.mode === "BOTH"
+                          ? "Both UPI QR & Razorpay Active"
+                          : paymentGatewayForm.mode === "UPI_ONLY"
+                            ? "Only Paytm / UPI QR Active"
+                            : "Only Razorpay Active"}
+                      </span>
+                    </span>
+                    <p className="text-[0.68rem] text-neutral-400">
+                      Configure or switch between UPI and Razorpay in Website Settings.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setActiveTab("settings")}
+                  className="px-3.5 py-1.5 rounded-xl border border-neutral-700 bg-neutral-800 text-[0.68rem] font-bold uppercase tracking-wider text-neutral-200 hover:border-[#CCFF00] hover:text-[#CCFF00] transition-colors self-start sm:self-auto"
+                >
+                  Configure Gateway Settings →
                 </button>
               </div>
 
@@ -3255,6 +3379,226 @@ export default function AdminPage() {
                       </div>
                     )}
                   </div>
+                </div>
+
+                {/* CARD 3: PAYMENT GATEWAY & METHOD CONTROLS */}
+                <div className="lg:col-span-2 rounded-3xl border border-neutral-800 bg-neutral-900/60 p-6 sm:p-8 space-y-6">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-neutral-800 pb-4">
+                    <div className="flex items-center gap-3">
+                      <div className="h-10 w-10 rounded-2xl bg-[#CCFF00]/10 text-[#CCFF00] grid place-items-center">
+                        <CreditCard size={20} />
+                      </div>
+                      <div>
+                        <h3 className="font-extrabold text-lg text-white">
+                          Customer Payment Methods & Gateway Settings
+                        </h3>
+                        <p className="text-xs text-neutral-400">
+                          Select which payment methods players can use to book slots on{" "}
+                          <code className="text-[#CCFF00]">/book</code>
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="px-3 py-1 rounded-full bg-[#CCFF00]/10 border border-[#CCFF00]/30 text-[#CCFF00] text-xs font-black uppercase">
+                      Active on Site:{" "}
+                      {paymentGatewayForm.mode === "BOTH"
+                        ? "Both UPI & Razorpay"
+                        : paymentGatewayForm.mode === "UPI_ONLY"
+                          ? "Only Paytm UPI"
+                          : "Only Razorpay"}
+                    </div>
+                  </div>
+
+                  <form onSubmit={handleUpdatePaymentSettings} className="space-y-6">
+                    {/* Method Selector Option Cards */}
+                    <div className="space-y-2">
+                      <label className="block text-xs font-black uppercase tracking-wider text-neutral-300">
+                        Choose Active Payment Method on Booking Page
+                      </label>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        {/* Option 1: Both */}
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setPaymentGatewayForm({ ...paymentGatewayForm, mode: "BOTH" })
+                          }
+                          className={`p-4 rounded-2xl border text-left transition-all flex flex-col justify-between space-y-3 ${
+                            paymentGatewayForm.mode === "BOTH"
+                              ? "border-[#CCFF00] bg-[#CCFF00]/10 text-white shadow-[0_0_20px_rgba(204,255,0,0.1)]"
+                              : "border-neutral-800 bg-black/40 text-neutral-400 hover:border-neutral-700 hover:text-white"
+                          }`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-black uppercase tracking-wider text-[#CCFF00]">
+                              Option 1 (Recommended)
+                            </span>
+                            <span
+                              className={`h-4 w-4 rounded-full border-2 grid place-items-center ${
+                                paymentGatewayForm.mode === "BOTH"
+                                  ? "border-[#CCFF00] bg-[#CCFF00]"
+                                  : "border-neutral-600"
+                              }`}
+                            >
+                              {paymentGatewayForm.mode === "BOTH" && (
+                                <span className="h-1.5 w-1.5 rounded-full bg-black" />
+                              )}
+                            </span>
+                          </div>
+                          <div>
+                            <div className="text-base font-bold text-white">
+                              Both UPI & Razorpay Active
+                            </div>
+                            <p className="text-xs text-neutral-400 mt-1">
+                              Players can choose between Paytm/UPI QR or Razorpay Live at checkout.
+                            </p>
+                          </div>
+                        </button>
+
+                        {/* Option 2: UPI Only */}
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setPaymentGatewayForm({ ...paymentGatewayForm, mode: "UPI_ONLY" })
+                          }
+                          className={`p-4 rounded-2xl border text-left transition-all flex flex-col justify-between space-y-3 ${
+                            paymentGatewayForm.mode === "UPI_ONLY"
+                              ? "border-[#CCFF00] bg-[#CCFF00]/10 text-white shadow-[0_0_20px_rgba(204,255,0,0.1)]"
+                              : "border-neutral-800 bg-black/40 text-neutral-400 hover:border-neutral-700 hover:text-white"
+                          }`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-black uppercase tracking-wider text-[#CCFF00]">
+                              Option 2
+                            </span>
+                            <span
+                              className={`h-4 w-4 rounded-full border-2 grid place-items-center ${
+                                paymentGatewayForm.mode === "UPI_ONLY"
+                                  ? "border-[#CCFF00] bg-[#CCFF00]"
+                                  : "border-neutral-600"
+                              }`}
+                            >
+                              {paymentGatewayForm.mode === "UPI_ONLY" && (
+                                <span className="h-1.5 w-1.5 rounded-full bg-black" />
+                              )}
+                            </span>
+                          </div>
+                          <div>
+                            <div className="text-base font-bold text-white">
+                              Only Paytm / UPI QR Active
+                            </div>
+                            <p className="text-xs text-neutral-400 mt-1">
+                              Checkout will exclusively show the Paytm / PhonePe / GPay QR code.
+                            </p>
+                          </div>
+                        </button>
+
+                        {/* Option 3: Razorpay Only */}
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setPaymentGatewayForm({ ...paymentGatewayForm, mode: "RAZORPAY_ONLY" })
+                          }
+                          className={`p-4 rounded-2xl border text-left transition-all flex flex-col justify-between space-y-3 ${
+                            paymentGatewayForm.mode === "RAZORPAY_ONLY"
+                              ? "border-[#CCFF00] bg-[#CCFF00]/10 text-white shadow-[0_0_20px_rgba(204,255,0,0.1)]"
+                              : "border-neutral-800 bg-black/40 text-neutral-400 hover:border-neutral-700 hover:text-white"
+                          }`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-black uppercase tracking-wider text-[#CCFF00]">
+                              Option 3
+                            </span>
+                            <span
+                              className={`h-4 w-4 rounded-full border-2 grid place-items-center ${
+                                paymentGatewayForm.mode === "RAZORPAY_ONLY"
+                                  ? "border-[#CCFF00] bg-[#CCFF00]"
+                                  : "border-neutral-600"
+                              }`}
+                            >
+                              {paymentGatewayForm.mode === "RAZORPAY_ONLY" && (
+                                <span className="h-1.5 w-1.5 rounded-full bg-black" />
+                              )}
+                            </span>
+                          </div>
+                          <div>
+                            <div className="text-base font-bold text-white">
+                              Only Razorpay Active
+                            </div>
+                            <p className="text-xs text-neutral-400 mt-1">
+                              Checkout will exclusively redirect players to Razorpay Live / Gateway.
+                            </p>
+                          </div>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Configuration Fields */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2">
+                      <div>
+                        <label className="block text-[0.65rem] font-black uppercase text-neutral-400 mb-1">
+                          Merchant Paytm / UPI ID
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          value={paymentGatewayForm.upiId}
+                          onChange={(e) =>
+                            setPaymentGatewayForm({
+                              ...paymentGatewayForm,
+                              upiId: e.target.value,
+                            })
+                          }
+                          className="w-full bg-black border border-neutral-800 rounded-xl py-2.5 px-3 text-xs font-mono text-[#CCFF00] focus:border-[#CCFF00] focus:outline-none"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[0.65rem] font-black uppercase text-neutral-400 mb-1">
+                          Merchant Payee Name
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          value={paymentGatewayForm.merchantName}
+                          onChange={(e) =>
+                            setPaymentGatewayForm({
+                              ...paymentGatewayForm,
+                              merchantName: e.target.value,
+                            })
+                          }
+                          className="w-full bg-black border border-neutral-800 rounded-xl py-2.5 px-3 text-xs text-white focus:border-[#CCFF00] focus:outline-none"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[0.65rem] font-black uppercase text-neutral-400 mb-1">
+                          Razorpay.me Payment URL
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          value={paymentGatewayForm.razorpayMeUrl}
+                          onChange={(e) =>
+                            setPaymentGatewayForm({
+                              ...paymentGatewayForm,
+                              razorpayMeUrl: e.target.value,
+                            })
+                          }
+                          className="w-full bg-black border border-neutral-800 rounded-xl py-2.5 px-3 text-xs font-mono text-[#CCFF00] focus:border-[#CCFF00] focus:outline-none"
+                        />
+                      </div>
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={savingPaymentSettings}
+                      className="px-6 py-3 rounded-xl bg-[#CCFF00] text-black text-xs font-black uppercase tracking-wider hover:bg-[#b8e600] transition-colors shadow-lg shadow-[#CCFF00]/10 disabled:opacity-50"
+                    >
+                      {savingPaymentSettings
+                        ? "Saving Settings..."
+                        : "Save Payment Gateway Settings"}
+                    </button>
+                  </form>
                 </div>
               </div>
             </div>
@@ -4212,6 +4556,224 @@ export default function AdminPage() {
               >
                 {editingCouponId ? "Update Promo Code" : "Create Promo Coupon"}
               </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: OFFLINE / MANUAL BOOKING WITH UPI OR RAZORPAY */}
+      {showOfflineModal && (
+        <div
+          className="fixed inset-0 z-50 grid place-items-center bg-black/80 p-4 backdrop-blur-md"
+          onClick={() => setShowOfflineModal(false)}
+        >
+          <div
+            className="rounded-3xl border border-neutral-800 bg-neutral-900 p-6 w-full max-w-lg space-y-5 shadow-2xl max-h-[92vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-neutral-800 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="h-9 w-9 rounded-xl bg-[#CCFF00]/10 text-[#CCFF00] grid place-items-center">
+                  <Plus size={18} />
+                </div>
+                <div>
+                  <h3 className="text-xl font-black text-white uppercase font-display">
+                    Create Booking & Select Payment
+                  </h3>
+                  <p className="text-xs text-neutral-400">
+                    Record offline counter, UPI QR, or Razorpay payment
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowOfflineModal(false)}
+                className="text-neutral-500 hover:text-white text-sm font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleOfflineBookingSubmit} className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[0.65rem] font-black uppercase text-neutral-400 mb-1">
+                    Customer Full Name <span className="text-[#CCFF00]">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Rahul Sharma"
+                    value={offlineForm.customerName}
+                    onChange={(e) =>
+                      setOfflineForm({ ...offlineForm, customerName: e.target.value })
+                    }
+                    className="w-full bg-black border border-neutral-800 rounded-xl py-2.5 px-3 text-xs text-white focus:border-[#CCFF00] focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[0.65rem] font-black uppercase text-neutral-400 mb-1">
+                    Phone Number <span className="text-[#CCFF00]">*</span>
+                  </label>
+                  <input
+                    type="tel"
+                    required
+                    placeholder="10-digit mobile number"
+                    value={offlineForm.customerPhone}
+                    onChange={(e) =>
+                      setOfflineForm({ ...offlineForm, customerPhone: e.target.value })
+                    }
+                    className="w-full bg-black border border-neutral-800 rounded-xl py-2.5 px-3 text-xs font-mono text-white focus:border-[#CCFF00] focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-[0.65rem] font-black uppercase text-neutral-400 mb-1">
+                    Booking Date
+                  </label>
+                  <input
+                    type="date"
+                    required
+                    value={offlineForm.bookingDate}
+                    onChange={(e) =>
+                      setOfflineForm({ ...offlineForm, bookingDate: e.target.value })
+                    }
+                    className="w-full bg-black border border-neutral-800 rounded-xl py-2.5 px-3 text-xs text-white focus:border-[#CCFF00] focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[0.65rem] font-black uppercase text-neutral-400 mb-1">
+                    Time Slot
+                  </label>
+                  <select
+                    value={offlineForm.startHour}
+                    onChange={(e) => {
+                      const h = Number(e.target.value);
+                      const isNight = h >= 17;
+                      setOfflineForm({
+                        ...offlineForm,
+                        startHour: h,
+                        amountPaise: isNight ? 49900 : 29900,
+                      });
+                    }}
+                    className="w-full bg-black border border-neutral-800 rounded-xl py-2.5 px-3 text-xs text-white focus:border-[#CCFF00] focus:outline-none"
+                  >
+                    {Array.from({ length: 17 }, (_, i) => i + 6).map((h) => (
+                      <option key={h} value={h}>
+                        {h % 12 || 12}:00 {h >= 12 ? "PM" : "AM"} (
+                        {h >= 17 ? "Night ₹499" : "Day ₹299"})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[0.65rem] font-black uppercase text-neutral-400 mb-1">
+                    Players
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={16}
+                    value={offlineForm.players}
+                    onChange={(e) =>
+                      setOfflineForm({ ...offlineForm, players: Number(e.target.value) })
+                    }
+                    className="w-full bg-black border border-neutral-800 rounded-xl py-2.5 px-3 text-xs text-white focus:border-[#CCFF00] focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              {/* PAYMENT METHOD SELECTION */}
+              <div className="space-y-2 pt-2 border-t border-neutral-800">
+                <label className="block text-xs font-black uppercase tracking-wider text-neutral-300">
+                  Select Payment Method <span className="text-[#CCFF00]">*</span>
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setOfflineForm({ ...offlineForm, paymentMethod: "UPI" })}
+                    className={`py-3 px-2 rounded-xl border text-center transition-all ${
+                      offlineForm.paymentMethod === "UPI" || offlineForm.paymentMethod === "upi_qr"
+                        ? "border-[#CCFF00] bg-[#CCFF00]/15 text-[#CCFF00] font-black shadow"
+                        : "border-neutral-800 bg-black/40 text-neutral-400 hover:text-white"
+                    }`}
+                  >
+                    <QrCode size={16} className="mx-auto mb-1" />
+                    <div className="text-[0.68rem] font-bold uppercase">Paytm / UPI QR</div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setOfflineForm({ ...offlineForm, paymentMethod: "RAZORPAY" })}
+                    className={`py-3 px-2 rounded-xl border text-center transition-all ${
+                      offlineForm.paymentMethod === "RAZORPAY" ||
+                      offlineForm.paymentMethod === "razorpay_me"
+                        ? "border-[#CCFF00] bg-[#CCFF00]/15 text-[#CCFF00] font-black shadow"
+                        : "border-neutral-800 bg-black/40 text-neutral-400 hover:text-white"
+                    }`}
+                  >
+                    <CreditCard size={16} className="mx-auto mb-1" />
+                    <div className="text-[0.68rem] font-bold uppercase">Razorpay</div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setOfflineForm({ ...offlineForm, paymentMethod: "CASH_COUNTER" })
+                    }
+                    className={`py-3 px-2 rounded-xl border text-center transition-all ${
+                      offlineForm.paymentMethod === "CASH_COUNTER"
+                        ? "border-[#CCFF00] bg-[#CCFF00]/15 text-[#CCFF00] font-black shadow"
+                        : "border-neutral-800 bg-black/40 text-neutral-400 hover:text-white"
+                    }`}
+                  >
+                    <DollarSign size={16} className="mx-auto mb-1" />
+                    <div className="text-[0.68rem] font-bold uppercase">Cash at Counter</div>
+                  </button>
+                </div>
+              </div>
+
+              {/* Amount in Rupees */}
+              <div className="pt-2">
+                <label className="block text-[0.65rem] font-black uppercase text-neutral-400 mb-1">
+                  Amount Collected (₹)
+                </label>
+                <div className="relative flex items-center">
+                  <span className="absolute left-3 text-neutral-400 text-sm font-bold">₹</span>
+                  <input
+                    type="number"
+                    required
+                    value={offlineForm.amountPaise / 100}
+                    onChange={(e) =>
+                      setOfflineForm({
+                        ...offlineForm,
+                        amountPaise: Math.round(Number(e.target.value) * 100),
+                      })
+                    }
+                    className="w-full bg-black border border-neutral-800 rounded-xl py-2.5 pl-8 pr-3 text-sm font-mono font-bold text-[#CCFF00] focus:border-[#CCFF00] focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-3 pt-3 border-t border-neutral-800">
+                <button
+                  type="button"
+                  onClick={() => setShowOfflineModal(false)}
+                  className="px-4 py-2.5 rounded-xl border border-neutral-800 text-xs font-bold text-neutral-400 hover:text-white"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-6 py-2.5 rounded-xl bg-[#CCFF00] text-black text-xs font-black uppercase tracking-wider hover:bg-[#b8e600] transition-colors shadow-lg shadow-[#CCFF00]/10"
+                >
+                  Confirm & Save Booking
+                </button>
+              </div>
             </form>
           </div>
         </div>
