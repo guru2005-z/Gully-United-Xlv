@@ -2,7 +2,12 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createSupabaseServerClient } from "@/lib/supabase-auth-server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
-import { calculateSlotPrice, isBookingDateValid, VENUE_RULES } from "@/lib/domain/venue";
+import {
+  calculateGstPaise,
+  calculateSlotPrice,
+  isBookingDateValid,
+  VENUE_RULES,
+} from "@/lib/domain/venue";
 import { normalizeIndianPhone } from "@/lib/auth-domain";
 import { getStoredCoupons, saveStoredCoupons } from "@/lib/promo-store";
 
@@ -126,8 +131,11 @@ export async function POST(request: Request) {
 
     const calculatedPrice = calculateSlotPrice(hour);
     const discountPaise = await resolveAndIncrementCoupon(couponCode, calculatedPrice.amountPaise);
-    const finalAmountPaise = Math.max(0, calculatedPrice.amountPaise - discountPaise);
+    const subtotalPaise = Math.max(0, calculatedPrice.amountPaise - discountPaise);
+    const gstPaise = calculateGstPaise(subtotalPaise);
+    const finalAmountPaise = subtotalPaise + gstPaise;
     const finalAmountRupees = Math.round(finalAmountPaise / 100);
+    const gstRupees = Math.round(gstPaise / 100);
 
     const publicRef = `GUX-${Math.floor(1000 + Math.random() * 9000)}`;
     const cleanRef = transactionRef.trim();
@@ -240,6 +248,8 @@ export async function POST(request: Request) {
               method_label: methodLabel,
               amount_paise: finalAmountPaise,
               amount_rupees: finalAmountRupees,
+              gst_paise: gstPaise,
+              gst_rupees: gstRupees,
               coupon_code: couponCode || null,
               discount_paise: discountPaise,
               captured_at: new Date().toISOString(),
@@ -260,6 +270,7 @@ export async function POST(request: Request) {
       paymentStatus: "PAID",
       paymentMethod,
       amountRupees: finalAmountRupees,
+      gstRupees,
     });
   } catch (err) {
     console.error("[Direct Payment Confirm Error]:", err);

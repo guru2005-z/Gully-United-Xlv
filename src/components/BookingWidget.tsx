@@ -411,7 +411,10 @@ export function BookingWidget() {
   const taken = takenHours(selectedDate, existing);
   const price = hour === null ? null : priceForHour(hour);
   const discountAmount = appliedCoupon ? appliedCoupon.discountAmountRupees : 0;
-  const finalPrice = price !== null ? Math.max(0, price - discountAmount) : null;
+  const subtotalPrice = price !== null ? Math.max(0, price - discountAmount) : null;
+  const gstAmount = subtotalPrice !== null ? Math.round(subtotalPrice * 0.03) : null;
+  const finalPrice =
+    subtotalPrice !== null && gstAmount !== null ? subtotalPrice + gstAmount : null;
   const availableCount = allHours().filter(
     (h) => !taken.includes(h) && !isPastSlot(selectedDate, h),
   ).length;
@@ -774,23 +777,35 @@ export function BookingWidget() {
             </div>
             <div>
               <dt className="text-[0.62rem] uppercase tracking-[0.22em] text-neutral-400 font-bold">
-                Total Payable
+                Total Payable (Incl. GST)
               </dt>
               <dd className="display mt-1 text-2xl font-black text-[#CCFF00] flex items-baseline gap-2">
                 {finalPrice === null ? "—" : `₹${finalPrice}`}
                 {appliedCoupon && price !== null && (
                   <span className="text-xs text-neutral-500 line-through font-normal">
-                    ₹{price}
+                    ₹{price + Math.round(price * 0.03)}
                   </span>
                 )}
               </dd>
             </div>
           </dl>
 
-          {appliedCoupon && (
-            <div className="flex items-center justify-between text-xs text-[#CCFF00] font-bold border-t border-neutral-800/80 pt-2.5">
-              <span>Promo Discount ({appliedCoupon.code}):</span>
-              <span>-₹{appliedCoupon.discountAmountRupees}</span>
+          {price !== null && gstAmount !== null && (
+            <div className="space-y-1.5 border-t border-neutral-800/80 pt-3 text-xs">
+              <div className="flex items-center justify-between text-neutral-300 font-medium">
+                <span>Base Turf Slot Rate:</span>
+                <span className="font-mono font-bold text-white">₹{price}</span>
+              </div>
+              {appliedCoupon && (
+                <div className="flex items-center justify-between text-[#CCFF00] font-bold">
+                  <span>Promo Discount ({appliedCoupon.code}):</span>
+                  <span className="font-mono">-₹{appliedCoupon.discountAmountRupees}</span>
+                </div>
+              )}
+              <div className="flex items-center justify-between text-neutral-300 font-medium">
+                <span>GST (3% · ₹3 per ₹100):</span>
+                <span className="font-mono font-bold text-white">+₹{gstAmount}</span>
+              </div>
             </div>
           )}
         </div>
@@ -875,6 +890,8 @@ export function BookingWidget() {
         <PaymentModal
           onClose={() => setPayOpen(false)}
           amount={finalPrice ?? price}
+          baseAmount={subtotalPrice ?? price}
+          gstAmount={gstAmount}
           initialTab={payInitialTab}
           slotSummary={
             hour !== null
@@ -906,6 +923,8 @@ function loadRazorpayScript(): Promise<boolean> {
 function PaymentModal({
   onClose,
   amount,
+  baseAmount,
+  gstAmount,
   initialTab = "upi_qr",
   slotSummary,
   submitting,
@@ -914,6 +933,8 @@ function PaymentModal({
 }: {
   onClose: () => void;
   amount: number | null;
+  baseAmount?: number | null;
+  gstAmount?: number | null;
   initialTab?: "upi_qr" | "razorpay_me";
   slotSummary: string;
   submitting: boolean;
@@ -992,11 +1013,19 @@ function PaymentModal({
         <div className="flex items-center justify-between rounded-2xl bg-[#CCFF00]/10 border border-[#CCFF00]/30 px-3.5 py-2.5 sm:px-4 sm:py-3">
           <div>
             <div className="text-[0.62rem] sm:text-[0.65rem] font-black uppercase tracking-widest text-neutral-300">
-              Total Amount Payable
+              Total Payable (Incl. 3% GST)
             </div>
             <div className="text-xs text-neutral-400">
               Merchant: <span className="text-white font-bold">{MERCHANT_NAME}</span>
             </div>
+            {baseAmount !== undefined &&
+              baseAmount !== null &&
+              gstAmount !== undefined &&
+              gstAmount !== null && (
+                <div className="text-[0.68rem] text-[#CCFF00] font-bold mt-0.5 font-mono">
+                  Slot ₹{baseAmount} + GST (₹3/₹100) ₹{gstAmount}
+                </div>
+              )}
           </div>
           <div className="display text-2xl sm:text-3xl font-black text-[#CCFF00]">
             ₹{payableRupees}

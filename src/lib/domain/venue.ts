@@ -15,10 +15,26 @@ export const VENUE_RULES = {
   minPlayers: 1,
   dayRatePaise: 29900, // INR 299.00 before 17:00
   nightRatePaise: 49900, // INR 499.00 from 17:00 onwards
+  gstRatePercent: 3, // 3% GST (₹3 per ₹100)
   nightFromHour: 17, // 17:00 (5 PM)
   advanceBookingDays: 7,
   holdDurationMinutes: 10,
 } as const;
+
+/**
+ * Calculates 3% GST (₹3 per ₹100) in integer rupees.
+ */
+export function calculateGstRupees(subtotalRupees: number): number {
+  return Math.round(Math.max(0, subtotalRupees) * (VENUE_RULES.gstRatePercent / 100));
+}
+
+/**
+ * Calculates 3% GST (₹3 per ₹100) in integer paise (rounded to whole rupees).
+ */
+export function calculateGstPaise(subtotalPaise: number): number {
+  const subtotalRupees = Math.max(0, subtotalPaise) / 100;
+  return calculateGstRupees(subtotalRupees) * 100;
+}
 
 export interface SlotPriceInfo {
   startHour: number;

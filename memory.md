@@ -25,7 +25,7 @@
 
 - Venue capacity is confirmed as a maximum of 16 players per booking.
 - Customer authentication is required before booking/paying (`/book` redirects unauthenticated users to `/auth?redirect=/book`).
-- Razorpay payment capture: Auto-capture full slot amount immediately on checkout (`₹299` day / `₹499` night).
+- Razorpay payment capture: Auto-capture full slot amount immediately on checkout (`₹299` day / `₹499` night + **3% GST (`₹3` per `₹100`)**, i.e., `₹9` GST on `₹299` = `₹308` total, `₹15` GST on `₹499` = `₹514` total, or 3% of the post-discount subtotal).
 - Cancellation & refund policy: Admin-approved refunds only; no self-serve automatic refunds.
 
 ## Needs Client Input

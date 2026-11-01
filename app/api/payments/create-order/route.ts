@@ -3,7 +3,12 @@ import { z } from "zod";
 import { createSupabaseServerClient } from "@/lib/supabase-auth-server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { createRazorpayOrder } from "@/lib/adapters/razorpay-adapter";
-import { calculateSlotPrice, isBookingDateValid, VENUE_RULES } from "@/lib/domain/venue";
+import {
+  calculateGstPaise,
+  calculateSlotPrice,
+  isBookingDateValid,
+  VENUE_RULES,
+} from "@/lib/domain/venue";
 import { normalizeIndianPhone } from "@/lib/auth-domain";
 import { getStoredCoupons } from "@/lib/promo-store";
 
@@ -218,7 +223,9 @@ export async function POST(request: Request) {
         couponCode,
         calculatedPrice.amountPaise,
       );
-      const finalAmountPaise = Math.max(0, calculatedPrice.amountPaise - discountPaise);
+      const subtotalPaise = Math.max(0, calculatedPrice.amountPaise - discountPaise);
+      const gstPaise = calculateGstPaise(subtotalPaise);
+      const finalAmountPaise = subtotalPaise + gstPaise;
 
       const publicRef = `GUX-${Math.floor(1000 + Math.random() * 9000)}`;
       const { data: holdResult, error: holdError } = await db.rpc("create_booking_hold", {
