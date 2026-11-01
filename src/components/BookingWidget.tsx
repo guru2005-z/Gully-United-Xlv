@@ -4,21 +4,21 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
-  CalendarDays,
   Check,
-  Clock,
   Lock,
   Minus,
   Plus,
-  ShieldCheck,
   User as UserIcon,
-  Users,
   X,
   ArrowRight,
   Mail,
   Phone,
   Tag,
   CheckCircle2,
+  QrCode,
+  CreditCard,
+  Copy,
+  ExternalLink,
 } from "lucide-react";
 import type { User } from "@supabase/supabase-js";
 import { createSupabaseBrowserClient } from "@/lib/supabase-auth-client";
@@ -30,7 +30,6 @@ import {
   allHours,
   bookableDays,
   calendarLink,
-  createBooking,
   dateKey,
   hourLabel,
   isPastSlot,
@@ -44,6 +43,9 @@ import {
 } from "@/lib/booking";
 
 const STEPS = ["Date", "Time", "Players", "Details"] as const;
+const RAZORPAY_ME_HANDLE = "https://razorpay.me/@panabakapradeep";
+const MERCHANT_UPI_ID = "paytm.s2zq5m0@pty";
+const MERCHANT_NAME = "Panabaka Pradeep";
 
 export function BookingWidget() {
   const router = useRouter();
@@ -56,6 +58,7 @@ export function BookingWidget() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [booked, setBooked] = useState<Booking | null>(null);
   const [payOpen, setPayOpen] = useState(false);
+  const [payInitialTab, setPayInitialTab] = useState<"upi_qr" | "razorpay_me">("upi_qr");
   const [submitting, setSubmitting] = useState(false);
   const [loadingAvailability, setLoadingAvailability] = useState(true);
   const [existing, setExisting] = useState<Booking[]>([]);
@@ -159,6 +162,81 @@ export function BookingWidget() {
     setCouponError(null);
   }
 
+  function handleOpenLivePaymentModal(tab: "upi_qr" | "razorpay_me" = "upi_qr") {
+    if (!user) {
+      router.push("/auth?redirect=/book");
+      return;
+    }
+    if (!validate() || hour === null) return;
+    setErrors({});
+    setPayInitialTab(tab);
+    setPayOpen(true);
+  }
+
+  async function handleConfirmDirectPayment(
+    paymentMethod: "razorpay_me" | "upi_qr",
+    transactionRef: string,
+  ) {
+    if (!user) {
+      router.push("/auth?redirect=/book");
+      return;
+    }
+    if (!validate() || hour === null) return;
+    setSubmitting(true);
+    setErrors({});
+
+    try {
+      idempotencyKey.current ??= crypto.randomUUID();
+      const res = await fetch("/api/payments/confirm-direct", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          date: selectedDate,
+          hour,
+          players,
+          customerName: form.name.trim(),
+          customerPhone: form.phone.replace(/\D/g, ""),
+          customerEmail: form.email.trim(),
+          couponCode: appliedCoupon?.code,
+          paymentMethod,
+          transactionRef: transactionRef.trim(),
+          idempotencyKey: idempotencyKey.current,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.verified) {
+        throw new Error(data.error?.message || "Failed to confirm booking payment.");
+      }
+
+      setBooked({
+        id: data.bookingId || "paid-booking",
+        ref: data.bookingRef || "GUX-ONLINE",
+        name: form.name.trim(),
+        phone: form.phone.replace(/\D/g, ""),
+        email: form.email.trim(),
+        dateKey: selectedDate,
+        hour,
+        players,
+        amount: data.amountRupees ?? (finalPrice || 0),
+        status: "CONFIRMED",
+        paymentStatus: "PAID",
+        paymentMethod: paymentMethod === "razorpay_me" ? "razorpay" : "upi",
+        notes: `UTR/Ref: ${transactionRef.trim()}`,
+        createdAt: new Date().toISOString(),
+      });
+      idempotencyKey.current = null;
+      setPayOpen(false);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Could not verify payment.";
+      setErrors({ form: msg });
+      throw err;
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   async function handleInitiateRazorpayPayment() {
     if (!user) {
       router.push("/auth?redirect=/book");
@@ -171,8 +249,9 @@ export function BookingWidget() {
     try {
       const scriptLoaded = await loadRazorpayScript();
       if (!scriptLoaded) {
-        setErrors({ form: "Failed to load Razorpay payment SDK. Check network connection." });
         setPayingRazorpay(false);
+        setPayInitialTab("razorpay_me");
+        setPayOpen(true);
         return;
       }
 
@@ -193,11 +272,31 @@ export function BookingWidget() {
       });
 
       if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.error?.message || "Failed to create payment order.");
+        const errorData = await res.json().catch(() => ({}));
+        if (errorData?.error?.code === "SLOT_UNAVAILABLE") {
+          setErrors({
+            form:
+              errorData.error.message ||
+              "That slot was just booked by another player. Please choose another time.",
+          });
+          setPayingRazorpay(false);
+          return;
+        }
+        // When Razorpay API keys are not yet active, open the Live Razorpay.me + Paytm QR modal
+        setPayingRazorpay(false);
+        setPayInitialTab("upi_qr");
+        setPayOpen(true);
+        return;
       }
 
       const orderData = await res.json();
+      if (!orderData.keyId || String(orderData.keyId).includes("placeholder")) {
+        setPayingRazorpay(false);
+        setPayInitialTab("upi_qr");
+        setPayOpen(true);
+        return;
+      }
+
       const options = {
         key: orderData.keyId,
         amount: orderData.amountPaise,
@@ -268,10 +367,10 @@ export function BookingWidget() {
         }
       ).Razorpay(options);
       razorpay.open();
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Failed to initiate online payment.";
-      setErrors({ form: msg });
+    } catch {
       setPayingRazorpay(false);
+      setPayInitialTab("upi_qr");
+      setPayOpen(true);
     }
   }
 
@@ -336,41 +435,6 @@ export function BookingWidget() {
     if (hour === null) e["hour"] = "Select a time slot.";
     setErrors(e);
     return Object.keys(e).length === 0;
-  }
-
-  async function confirm() {
-    if (!user) {
-      router.push("/auth?redirect=/book");
-      return;
-    }
-    if (!validate() || hour === null) return;
-    setSubmitting(true);
-    try {
-      idempotencyKey.current ??= crypto.randomUUID();
-      const b = await createBooking(
-        {
-          name: form.name.trim(),
-          phone: form.phone.replace(/\D/g, ""),
-          email: form.email.trim(),
-          players,
-          dateKey: selectedDate,
-          hour,
-        },
-        idempotencyKey.current,
-      );
-      setBooked(b);
-      idempotencyKey.current = null;
-      window.scrollTo({ top: window.scrollY - 80, behavior: "smooth" });
-    } catch (err) {
-      setErrors({
-        form:
-          (err as Error).message === "SLOT_TAKEN"
-            ? "This slot is taken. Try another time."
-            : "Something went wrong. Please try again.",
-      });
-    } finally {
-      setSubmitting(false);
-    }
   }
 
   if (booked) return <Confirmation booking={booked} onReset={() => setBooked(null)} />;
@@ -764,16 +828,37 @@ export function BookingWidget() {
             <div className="mt-6 flex flex-wrap gap-3">
               <button
                 type="button"
-                onClick={handleInitiateRazorpayPayment}
+                onClick={() => handleOpenLivePaymentModal("upi_qr")}
                 disabled={payingRazorpay || submitting}
                 className="btn-neon arrow-slide w-full sm:w-auto justify-center"
               >
-                {payingRazorpay ? "Opening Razorpay…" : "Pay Online Now (Razorpay)"}{" "}
+                <QrCode size={16} />
+                <span>
+                  {submitting
+                    ? "Confirming Slot…"
+                    : `Scan Paytm / UPI QR${finalPrice ? ` (₹${finalPrice})` : ""}`}
+                </span>{" "}
                 <span className="arrow">→</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleOpenLivePaymentModal("razorpay_me")}
+                disabled={payingRazorpay || submitting}
+                className="btn-ghost w-full sm:w-auto justify-center border-[#CCFF00]/40 text-[#CCFF00] hover:bg-[#CCFF00]/10"
+              >
+                <CreditCard size={16} />
+                <span>
+                  {payingRazorpay
+                    ? "Opening Razorpay…"
+                    : `Pay via Razorpay Live${finalPrice ? ` (₹${finalPrice})` : ""}`}
+                </span>
               </button>
             </div>
             <p className="mt-3 text-xs text-muted-foreground">
-              Online payments processed instantly via Razorpay UPI, Cards, NetBanking.
+              Instant Live Payments accepted via{" "}
+              <strong className="text-white">Paytm / PhonePe / GPay QR ({MERCHANT_UPI_ID})</strong>{" "}
+              & <strong className="text-white">Razorpay Live (@panabakapradeep)</strong>.
             </p>
           </>
         )}
@@ -782,8 +867,16 @@ export function BookingWidget() {
       {payOpen && (
         <PaymentModal
           onClose={() => setPayOpen(false)}
-          amount={price}
-          onPayOnline={handleInitiateRazorpayPayment}
+          amount={finalPrice ?? price}
+          initialTab={payInitialTab}
+          slotSummary={
+            hour !== null
+              ? `${prettyDate(selectedDate)} · ${slotLabel(hour)}`
+              : prettyDate(selectedDate)
+          }
+          submitting={submitting}
+          onConfirmDirect={handleConfirmDirectPayment}
+          onPayRazorpayGateway={handleInitiateRazorpayPayment}
         />
       )}
     </div>
@@ -806,63 +899,257 @@ function loadRazorpayScript(): Promise<boolean> {
 function PaymentModal({
   onClose,
   amount,
-  onPayOnline,
+  initialTab = "upi_qr",
+  slotSummary,
+  submitting,
+  onConfirmDirect,
+  onPayRazorpayGateway,
 }: {
   onClose: () => void;
   amount: number | null;
-  onPayOnline?: () => void;
+  initialTab?: "upi_qr" | "razorpay_me";
+  slotSummary: string;
+  submitting: boolean;
+  onConfirmDirect: (method: "razorpay_me" | "upi_qr", ref: string) => Promise<void>;
+  onPayRazorpayGateway?: () => void;
 }) {
+  const [tab, setTab] = useState<"upi_qr" | "razorpay_me">(initialTab);
+  const [transactionRef, setTransactionRef] = useState("");
+  const [copiedUpi, setCopiedUpi] = useState(false);
+  const [localError, setLocalError] = useState<string | null>(null);
+  const [razorpayOpened, setRazorpayOpened] = useState(false);
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
+  const payableRupees = amount ?? 299;
+  const upiIntentUrl = `upi://pay?pa=${encodeURIComponent(MERCHANT_UPI_ID)}&pn=${encodeURIComponent(
+    MERCHANT_NAME,
+  )}&am=${payableRupees}&cu=INR&tn=${encodeURIComponent(`Gully United XLV Turf - ${slotSummary}`)}`;
+  const razorpayMeAmountUrl = `${RAZORPAY_ME_HANDLE}/${payableRupees}`;
+
+  const handleCopyUpi = () => {
+    navigator.clipboard.writeText(MERCHANT_UPI_ID);
+    setCopiedUpi(true);
+    setTimeout(() => setCopiedUpi(false), 2500);
+  };
+
+  const handleSubmitVerification = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLocalError(null);
+    if (!transactionRef.trim() || transactionRef.trim().length < 4) {
+      setLocalError("Please enter your 12-digit UPI UTR or Razorpay Payment ID to lock your slot.");
+      return;
+    }
+    try {
+      await onConfirmDirect(tab, transactionRef.trim());
+    } catch (err: unknown) {
+      setLocalError(err instanceof Error ? err.message : "Could not verify payment.");
+    }
+  };
+
   return (
     <div
       role="dialog"
       aria-modal="true"
-      aria-label="Payment"
-      className="fixed inset-0 z-[80] grid place-items-center bg-black/80 p-4 backdrop-blur-sm"
+      aria-label="Live Payment Checkout"
+      className="fixed inset-0 z-[80] grid place-items-center bg-black/85 p-4 backdrop-blur-md overflow-y-auto"
     >
-      <div className="panel w-full max-w-md p-6 space-y-4">
-        <div className="flex items-start justify-between gap-4 border-b border-border pb-3">
+      <div className="panel w-full max-w-lg p-6 space-y-5 border border-[#CCFF00]/30 bg-neutral-950 shadow-[0_0_50px_rgba(204,255,0,0.12)] my-8">
+        {/* Header */}
+        <div className="flex items-start justify-between gap-4 border-b border-neutral-800 pb-4">
           <div>
-            <span className="text-[0.65rem] font-extrabold uppercase tracking-widest text-primary">
-              Razorpay Secured Gateway
+            <span className="text-[0.65rem] font-extrabold uppercase tracking-widest text-[#CCFF00] flex items-center gap-1.5">
+              <span className="h-2 w-2 rounded-full bg-[#CCFF00] animate-pulse" />
+              Gully United XLV · Live Payment Checkout
             </span>
-            <h3 className="text-2xl font-black">Checkout Payment</h3>
+            <h3 className="text-2xl font-black text-white mt-0.5">Complete Slot Payment</h3>
+            <p className="text-xs text-neutral-400 mt-0.5">{slotSummary}</p>
           </div>
           <button
             type="button"
             onClick={onClose}
             aria-label="Close"
-            className="text-muted-foreground hover:text-primary"
+            className="rounded-lg p-1.5 text-neutral-400 hover:bg-neutral-800 hover:text-white transition-colors"
           >
             <X size={20} />
           </button>
         </div>
 
-        <p className="text-sm text-muted-foreground">
-          Instant booking confirmation powered by Razorpay 256-bit SSL encrypted checkout.
-        </p>
-
-        {amount !== null && <p className="display text-4xl text-primary font-black">₹{amount}</p>}
-
-        <div className="space-y-2 pt-2">
-          {onPayOnline && (
-            <button
-              type="button"
-              onClick={() => {
-                onClose();
-                onPayOnline();
-              }}
-              className="btn-neon w-full justify-center text-sm"
-            >
-              Pay Online Now via Razorpay
-            </button>
-          )}
+        {/* Amount Banner */}
+        <div className="flex items-center justify-between rounded-2xl bg-[#CCFF00]/10 border border-[#CCFF00]/30 px-4 py-3">
+          <div>
+            <div className="text-[0.65rem] font-black uppercase tracking-widest text-neutral-300">
+              Total Amount Payable
+            </div>
+            <div className="text-xs text-neutral-400">
+              Merchant: <span className="text-white font-bold">{MERCHANT_NAME}</span>
+            </div>
+          </div>
+          <div className="display text-3xl font-black text-[#CCFF00]">₹{payableRupees}</div>
         </div>
+
+        {/* Payment Method Tabs */}
+        <div className="grid grid-cols-2 gap-2 rounded-xl bg-black p-1.5 border border-neutral-800">
+          <button
+            type="button"
+            onClick={() => {
+              setTab("upi_qr");
+              setLocalError(null);
+            }}
+            className={`flex items-center justify-center gap-2 rounded-lg py-2.5 text-xs font-black uppercase tracking-wider transition-all ${
+              tab === "upi_qr"
+                ? "bg-[#CCFF00] text-black shadow"
+                : "text-neutral-400 hover:text-white"
+            }`}
+          >
+            <QrCode size={15} /> Paytm / UPI QR
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setTab("razorpay_me");
+              setLocalError(null);
+            }}
+            className={`flex items-center justify-center gap-2 rounded-lg py-2.5 text-xs font-black uppercase tracking-wider transition-all ${
+              tab === "razorpay_me"
+                ? "bg-[#CCFF00] text-black shadow"
+                : "text-neutral-400 hover:text-white"
+            }`}
+          >
+            <CreditCard size={15} /> Razorpay Live
+          </button>
+        </div>
+
+        {tab === "upi_qr" ? (
+          <div className="space-y-4">
+            <div className="rounded-2xl border border-neutral-800 bg-black p-4 text-center space-y-3">
+              <div className="mx-auto max-w-[230px] overflow-hidden rounded-xl border-2 border-[#CCFF00]/50 bg-white p-2 shadow-lg">
+                <img
+                  src="/paytm-qr.jpg"
+                  alt="Panabaka Pradeep Paytm UPI QR Code"
+                  className="w-full h-auto object-contain rounded-lg"
+                />
+              </div>
+              <div className="space-y-1">
+                <p className="text-xs font-black uppercase tracking-wider text-white">
+                  Scan with Paytm, PhonePe, Google Pay, or Any UPI App
+                </p>
+                <div className="inline-flex items-center gap-2 rounded-lg bg-neutral-900 border border-neutral-800 px-3 py-1.5">
+                  <span className="font-mono text-xs font-bold text-[#CCFF00]">
+                    {MERCHANT_UPI_ID}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleCopyUpi}
+                    className="inline-flex items-center gap-1 rounded bg-[#CCFF00]/15 px-2 py-0.5 text-[0.65rem] font-black uppercase text-[#CCFF00] hover:bg-[#CCFF00]/25"
+                  >
+                    <Copy size={11} /> {copiedUpi ? "Copied!" : "Copy"}
+                  </button>
+                </div>
+              </div>
+
+              <a
+                href={upiIntentUrl}
+                className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-[#CCFF00]/40 bg-[#CCFF00]/10 py-2.5 px-4 text-xs font-black uppercase tracking-wider text-[#CCFF00] hover:bg-[#CCFF00]/20 transition-colors sm:hidden"
+              >
+                Open UPI App to Pay ₹{payableRupees} <ExternalLink size={14} />
+              </a>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <div className="rounded-2xl border border-neutral-800 bg-black p-5 space-y-4 text-center">
+              <div className="mx-auto inline-flex h-12 w-12 items-center justify-center rounded-full bg-[#CCFF00]/10 text-[#CCFF00] border border-[#CCFF00]/30">
+                <CreditCard size={22} />
+              </div>
+              <div className="space-y-1">
+                <h4 className="text-sm font-black uppercase tracking-wider text-white">
+                  Official Razorpay.me Live Checkout
+                </h4>
+                <p className="text-xs text-neutral-400">
+                  Pay <strong className="text-[#CCFF00]">₹{payableRupees}</strong> securely via{" "}
+                  <span className="font-mono text-white">razorpay.me/@panabakapradeep</span> using
+                  UPI, Credit/Debit Cards, or NetBanking.
+                </p>
+              </div>
+
+              <a
+                href={razorpayMeAmountUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={() => setRazorpayOpened(true)}
+                className="btn-neon w-full justify-center py-3 text-xs font-black uppercase tracking-wider flex items-center gap-2"
+              >
+                <span>Pay ₹{payableRupees} on Razorpay.me</span>
+                <ExternalLink size={15} />
+              </a>
+
+              {razorpayOpened && (
+                <p className="text-[0.7rem] text-[#CCFF00] font-bold">
+                  ✓ Razorpay tab opened! After completing payment, enter your Payment ID / UTR
+                  below.
+                </p>
+              )}
+
+              {onPayRazorpayGateway && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    onPayRazorpayGateway();
+                  }}
+                  className="text-[0.68rem] font-bold text-neutral-400 hover:text-white underline uppercase tracking-wider"
+                >
+                  Or try in-page Razorpay API Gateway
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Step 2: Enter UTR / Transaction ID to Lock Slot */}
+        <form
+          onSubmit={handleSubmitVerification}
+          className="space-y-3 border-t border-neutral-800 pt-4"
+        >
+          <div>
+            <label className="block text-[0.68rem] font-black uppercase tracking-widest text-neutral-300 mb-1.5">
+              Enter 12-Digit UPI UTR / Razorpay Payment ID <span className="text-[#CCFF00]">*</span>
+            </label>
+            <input
+              type="text"
+              required
+              value={transactionRef}
+              onChange={(e) => setTransactionRef(e.target.value)}
+              placeholder={
+                tab === "upi_qr"
+                  ? "e.g. 430512345678 (12-digit UTR from Paytm/PhonePe/GPay)"
+                  : "e.g. pay_Pxyz12345 or 12-digit UPI UTR number"
+              }
+              className="w-full rounded-xl border border-neutral-700 bg-black px-3.5 py-3 text-xs font-mono font-bold text-white placeholder-neutral-500 focus:border-[#CCFF00] focus:outline-none focus:ring-1 focus:ring-[#CCFF00]"
+            />
+          </div>
+
+          {localError && (
+            <p className="text-xs font-bold text-red-400 bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-2">
+              ✕ {localError}
+            </p>
+          )}
+
+          <button
+            type="submit"
+            disabled={submitting}
+            className="btn-neon w-full justify-center py-3.5 text-xs font-black uppercase tracking-widest"
+          >
+            {submitting
+              ? "Verifying & Locking Slot…"
+              : `Verify Payment & Confirm Booking (₹${payableRupees})`}
+          </button>
+        </form>
       </div>
     </div>
   );
@@ -872,7 +1159,7 @@ function Confirmation({ booking, onReset }: { booking: Booking; onReset: () => v
   const waText = encodeURIComponent(
     `Hi Gully United XLV, I have booked slot ${booking.ref} on ${prettyDate(booking.dateKey)} at ${slotLabel(
       booking.hour,
-    )} for ${booking.players} players.`,
+    )} for ${booking.players} players. (${booking.notes || "Paid Online"})`,
   );
   return (
     <div className="panel relative overflow-hidden p-6 text-center sm:p-10">

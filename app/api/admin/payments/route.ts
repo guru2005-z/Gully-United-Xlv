@@ -35,24 +35,29 @@ export async function GET() {
             b.payment_status === "PAID" ||
             b.payment_status === "REFUNDED",
         )
-        .map((b) => ({
-          id: b.id,
-          booking_id: b.id,
-          razorpay_order_id: b.razorpay_order_id || b.payment_order_id || `order_${b.reference}`,
-          razorpay_payment_id: b.razorpay_payment_id || b.payment_id || null,
-          amount_paise:
-            b.amount_paise || (b.amount ? (b.amount > 2000 ? b.amount : b.amount * 100) : 0),
-          currency: "INR",
-          status:
-            b.payment_status === "PAID"
-              ? "paid"
-              : b.payment_status === "REFUNDED"
-                ? "refunded"
-                : "created",
-          method: b.payment_method || "razorpay",
-          created_at: b.created_at,
-          bookings: b,
-        }));
+        .map((b) => {
+          const notesMatch =
+            typeof b.notes === "string" ? b.notes.match(/Ref\/UTR:\s*([^\s|]+)/i) : null;
+          const extractedRef = notesMatch?.[1] || null;
+          return {
+            id: b.id,
+            booking_id: b.id,
+            razorpay_order_id: b.razorpay_order_id || b.payment_order_id || `order_${b.reference}`,
+            razorpay_payment_id: b.razorpay_payment_id || b.payment_id || extractedRef || null,
+            amount_paise:
+              b.amount_paise || (b.amount ? (b.amount > 2000 ? b.amount : b.amount * 100) : 0),
+            currency: "INR",
+            status:
+              b.payment_status === "PAID"
+                ? "paid"
+                : b.payment_status === "REFUNDED"
+                  ? "refunded"
+                  : "created",
+            method: b.payment_method || "razorpay",
+            created_at: b.created_at,
+            bookings: b,
+          };
+        });
     }
 
     // 2. Fetch Webhook Events (or synthesize from booking_events)
