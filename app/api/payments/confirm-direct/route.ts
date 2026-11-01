@@ -13,7 +13,8 @@ import { getStoredCoupons, saveStoredCoupons } from "@/lib/promo-store";
 
 const confirmDirectSchema = z.object({
   date: z.string().min(8),
-  hour: z.number().int().min(6).max(22),
+  hour: z.number().int().min(6).max(22).optional(),
+  hours: z.array(z.number().int().min(6).max(22)).min(1).max(17).optional(),
   players: z.number().int().min(1).max(16).default(10),
   customerName: z.string().min(2),
   customerPhone: z.string().min(10),
@@ -85,6 +86,7 @@ export async function POST(request: Request) {
     const {
       date,
       hour,
+      hours,
       players,
       customerName,
       customerPhone,
@@ -94,6 +96,22 @@ export async function POST(request: Request) {
       transactionRef,
       idempotencyKey,
     } = parseResult.data;
+
+    const hoursList = Array.from(
+      new Set(hours && hours.length > 0 ? hours : hour !== undefined ? [hour] : []),
+    ).sort((a, b) => a - b);
+
+    if (hoursList.length === 0) {
+      return NextResponse.json(
+        {
+          error: {
+            code: "INVALID_INPUT",
+            message: "Select at least one time slot.",
+          },
+        },
+        { status: 400 },
+      );
+    }
 
     const supabase = await createSupabaseServerClient();
     const db = getSupabaseAdmin();
@@ -129,143 +147,197 @@ export async function POST(request: Request) {
       );
     }
 
-    const calculatedPrice = calculateSlotPrice(hour);
-    const discountPaise = await resolveAndIncrementCoupon(couponCode, calculatedPrice.amountPaise);
-    const subtotalPaise = Math.max(0, calculatedPrice.amountPaise - discountPaise);
+    // Pre-check that none of the selected slots are already booked on this date
+    const { data: existingTaken } = await db
+      .from("bookings")
+      .select("start_hour, status")
+      .eq("venue_id", venue.id)
+      .eq("date_key", date)
+      .in("start_hour", hoursList)
+      .in("status", ["PENDING", "CONFIRMED", "HOLD", "PAID", "BLOCKED", "COMPLETED"]);
+
+    if (existingTaken && existingTaken.length > 0) {
+      return NextResponse.json(
+        {
+          error: {
+            code: "SLOT_UNAVAILABLE",
+            message: `One or more selected slots (${existingTaken.map((s) => `${s.start_hour}:00`).join(", ")}) were just booked. Please update your slot selection.`,
+          },
+        },
+        { status: 409 },
+      );
+    }
+
+    const slotPricesPaise = hoursList.map((h) => calculateSlotPrice(h).amountPaise);
+    const totalBasePaise = slotPricesPaise.reduce((sum, p) => sum + p, 0);
+    const discountPaise = await resolveAndIncrementCoupon(couponCode, totalBasePaise);
+    const subtotalPaise = Math.max(0, totalBasePaise - discountPaise);
     const gstPaise = calculateGstPaise(subtotalPaise);
     const finalAmountPaise = subtotalPaise + gstPaise;
     const finalAmountRupees = Math.round(finalAmountPaise / 100);
     const gstRupees = Math.round(gstPaise / 100);
 
-    const publicRef = `GUX-${Math.floor(1000 + Math.random() * 9000)}`;
+    const baseGroupRef = `GUX-${Math.floor(1000 + Math.random() * 9000)}`;
     const cleanRef = transactionRef.trim();
     const methodLabel =
       paymentMethod === "razorpay_me"
         ? "Razorpay.me (@panabakapradeep)"
         : "Paytm UPI QR (paytm.s2zq5m0@pty)";
 
-    // Create booking via RPC hold first, then confirm immediately
-    let bookingId: string | null = null;
-    let resolvedRef = publicRef;
+    const bookingIds: string[] = [];
+    const bookingRefs: string[] = [];
 
-    const { data: holdResult, error: holdError } = await db.rpc("create_booking_hold", {
-      p_venue_id: venue.id,
-      p_customer_name: customerName.trim(),
-      p_customer_phone: phoneResult.e164,
-      p_customer_email: customerEmail.trim().toLowerCase(),
-      p_players: players,
-      p_booking_date: date,
-      p_start_hour: hour,
-      p_amount_paise: finalAmountPaise,
-      p_public_reference: publicRef,
-      p_hold_duration_minutes: VENUE_RULES.holdDurationMinutes,
-    });
+    // Allocate finalAmountRupees across the selected slots so the sum matches finalAmountRupees
+    let allocatedRupees = 0;
 
-    if (holdError) {
-      if (holdError.code === "23505") {
-        return NextResponse.json(
-          {
-            error: {
-              code: "SLOT_UNAVAILABLE",
-              message: "That slot was just booked by another player. Please choose another time.",
+    for (let i = 0; i < hoursList.length; i++) {
+      const slotHour = hoursList[i]!;
+      const slotBasePaise = slotPricesPaise[i]!;
+      const isLast = i === hoursList.length - 1;
+      const slotRupees = isLast
+        ? Math.max(0, finalAmountRupees - allocatedRupees)
+        : Math.round((finalAmountRupees * slotBasePaise) / Math.max(1, totalBasePaise));
+      allocatedRupees += slotRupees;
+      const slotPaise = slotRupees * 100;
+
+      const slotRef = hoursList.length === 1 ? baseGroupRef : `${baseGroupRef}-${i + 1}`;
+      const multiNote =
+        hoursList.length > 1
+          ? ` | Slot ${i + 1}/${hoursList.length} (Total ₹${finalAmountRupees})`
+          : "";
+
+      let slotBookingId: string | null = null;
+      let resolvedRef = slotRef;
+
+      const { data: holdResult, error: holdError } = await db.rpc("create_booking_hold", {
+        p_venue_id: venue.id,
+        p_customer_name: customerName.trim(),
+        p_customer_phone: phoneResult.e164,
+        p_customer_email: customerEmail.trim().toLowerCase(),
+        p_players: players,
+        p_booking_date: date,
+        p_start_hour: slotHour,
+        p_amount_paise: slotPaise,
+        p_public_reference: slotRef,
+        p_hold_duration_minutes: VENUE_RULES.holdDurationMinutes,
+      });
+
+      if (holdError) {
+        if (holdError.code === "23505") {
+          return NextResponse.json(
+            {
+              error: {
+                code: "SLOT_UNAVAILABLE",
+                message: "One of your selected slots was just booked by another player.",
+              },
             },
-          },
-          { status: 409 },
-        );
-      }
-
-      // Direct insert fallback if RPC is unavailable
-      const { data: directBooking, error: directErr } = await db
-        .from("bookings")
-        .insert({
-          venue_id: venue.id,
-          reference: publicRef,
-          customer_name: customerName.trim(),
-          phone: phoneResult.e164,
-          email: customerEmail.trim().toLowerCase(),
-          players,
-          date_key: date,
-          start_hour: hour,
-          amount: finalAmountRupees,
-          status: "CONFIRMED",
-          payment_status: "PAID",
-          payment_method: paymentMethod,
-          notes: `Paid via ${methodLabel} | Ref/UTR: ${cleanRef}${couponCode ? ` | Coupon: ${couponCode}` : ""}`,
-          idempotency_key: idempotencyKey || `${publicRef}-${Date.now()}`,
-          ...(userId ? { customer_id: userId } : {}),
-        })
-        .select("id, reference")
-        .single();
-
-      if (directErr || !directBooking) {
-        return NextResponse.json(
-          {
-            error: {
-              code: directErr?.code === "23505" ? "SLOT_UNAVAILABLE" : "BOOKING_FAILED",
-              message:
-                directErr?.code === "23505"
-                  ? "That slot was just booked by another player. Please choose another time."
-                  : directErr?.message || "Failed to confirm booking.",
-            },
-          },
-          { status: directErr?.code === "23505" ? 409 : 400 },
-        );
-      }
-
-      bookingId = directBooking.id;
-      resolvedRef = directBooking.reference || publicRef;
-    } else {
-      bookingId = holdResult?.[0]?.booking_id || holdResult?.booking_id || null;
-      if (bookingId) {
-        const updatePayload: Record<string, unknown> = {
-          status: "CONFIRMED",
-          payment_status: "PAID",
-          payment_method: paymentMethod,
-          amount: finalAmountRupees,
-          notes: `Paid via ${methodLabel} | Ref/UTR: ${cleanRef}${couponCode ? ` | Coupon: ${couponCode}` : ""}`,
-        };
-        if (userId) {
-          updatePayload["customer_id"] = userId;
+            { status: 409 },
+          );
         }
-        await db.from("bookings").update(updatePayload).eq("id", bookingId);
-      }
-    }
 
-    if (bookingId) {
-      try {
-        await db.from("booking_events").upsert(
-          {
-            booking_id: bookingId,
-            provider: paymentMethod,
-            event_key: `direct_payment:${bookingId}:${cleanRef}`,
-            event_type: "PAYMENT_CAPTURED",
-            from_status: "HOLD",
-            to_status: "CONFIRMED",
-            payload: {
-              razorpay_payment_id: cleanRef,
-              razorpay_order_id: `DIRECT-${resolvedRef}`,
-              method: paymentMethod,
-              method_label: methodLabel,
-              amount_paise: finalAmountPaise,
-              amount_rupees: finalAmountRupees,
-              gst_paise: gstPaise,
-              gst_rupees: gstRupees,
-              coupon_code: couponCode || null,
-              discount_paise: discountPaise,
-              captured_at: new Date().toISOString(),
+        const { data: directBooking, error: directErr } = await db
+          .from("bookings")
+          .insert({
+            venue_id: venue.id,
+            reference: slotRef,
+            customer_name: customerName.trim(),
+            phone: phoneResult.e164,
+            email: customerEmail.trim().toLowerCase(),
+            players,
+            date_key: date,
+            start_hour: slotHour,
+            amount: slotRupees,
+            status: "CONFIRMED",
+            payment_status: "PAID",
+            payment_method: paymentMethod,
+            notes: `Paid via ${methodLabel} | Ref/UTR: ${cleanRef}${couponCode ? ` | Coupon: ${couponCode}` : ""}${multiNote}`,
+            idempotency_key: `${idempotencyKey || baseGroupRef}-${slotHour}-${Date.now()}`,
+            ...(userId ? { customer_id: userId } : {}),
+          })
+          .select("id, reference")
+          .single();
+
+        if (directErr || !directBooking) {
+          return NextResponse.json(
+            {
+              error: {
+                code: directErr?.code === "23505" ? "SLOT_UNAVAILABLE" : "BOOKING_FAILED",
+                message:
+                  directErr?.code === "23505"
+                    ? "One of your selected slots was just booked by another player."
+                    : directErr?.message || "Failed to confirm booking.",
+              },
             },
-          },
-          { onConflict: "event_key" },
-        );
-      } catch {
-        // Ignore audit event error
+            { status: directErr?.code === "23505" ? 409 : 400 },
+          );
+        }
+
+        slotBookingId = directBooking.id;
+        resolvedRef = directBooking.reference || slotRef;
+      } else {
+        slotBookingId = holdResult?.[0]?.booking_id || holdResult?.booking_id || null;
+        if (slotBookingId) {
+          const updatePayload: Record<string, unknown> = {
+            status: "CONFIRMED",
+            payment_status: "PAID",
+            payment_method: paymentMethod,
+            amount: slotRupees,
+            notes: `Paid via ${methodLabel} | Ref/UTR: ${cleanRef}${couponCode ? ` | Coupon: ${couponCode}` : ""}${multiNote}`,
+          };
+          if (userId) {
+            updatePayload["customer_id"] = userId;
+          }
+          await db.from("bookings").update(updatePayload).eq("id", slotBookingId);
+        }
+      }
+
+      if (slotBookingId) {
+        bookingIds.push(slotBookingId);
+        bookingRefs.push(resolvedRef);
+
+        try {
+          await db.from("booking_events").upsert(
+            {
+              booking_id: slotBookingId,
+              provider: paymentMethod,
+              event_key: `direct_payment:${slotBookingId}:${cleanRef}`,
+              event_type: "PAYMENT_CAPTURED",
+              from_status: "HOLD",
+              to_status: "CONFIRMED",
+              payload: {
+                razorpay_payment_id: cleanRef,
+                razorpay_order_id: `DIRECT-${baseGroupRef}`,
+                method: paymentMethod,
+                method_label: methodLabel,
+                amount_paise: slotPaise,
+                amount_rupees: slotRupees,
+                total_order_paise: finalAmountPaise,
+                total_order_rupees: finalAmountRupees,
+                gst_paise: gstPaise,
+                gst_rupees: gstRupees,
+                hours: hoursList,
+                coupon_code: couponCode || null,
+                discount_paise: discountPaise,
+                captured_at: new Date().toISOString(),
+              },
+            },
+            { onConflict: "event_key" },
+          );
+        } catch {
+          // Ignore audit event error
+        }
       }
     }
 
     return NextResponse.json({
       verified: true,
-      bookingId: bookingId || publicRef,
-      bookingRef: resolvedRef,
+      bookingId: bookingIds[0] || baseGroupRef,
+      bookingIds,
+      bookingRef:
+        bookingRefs.length > 1
+          ? `${baseGroupRef} (${bookingRefs.length} slots)`
+          : bookingRefs[0] || baseGroupRef,
+      hours: hoursList,
       status: "CONFIRMED",
       paymentStatus: "PAID",
       paymentMethod,

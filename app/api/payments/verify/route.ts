@@ -61,22 +61,30 @@ export async function POST(request: Request) {
 
     const db = getSupabaseAdmin();
 
-    // Fetch booking
-    let bookingQuery = db.from("bookings").select("*");
-    if (bookingId) {
-      bookingQuery = bookingQuery.eq("id", bookingId);
-    } else {
-      bookingQuery = bookingQuery.or(
-        `razorpay_order_id.eq.${razorpay_order_id},payment_order_id.eq.${razorpay_order_id}`,
-      );
+    // Fetch all bookings linked to this order (supports both single-slot and multi-slot orders)
+    const { data: orderBookings } = await db
+      .from("bookings")
+      .select("*")
+      .or(`razorpay_order_id.eq.${razorpay_order_id},payment_order_id.eq.${razorpay_order_id}`);
+
+    let matchedBookings = orderBookings || [];
+    if (matchedBookings.length === 0 && bookingId) {
+      const { data: singleBooking } = await db
+        .from("bookings")
+        .select("*")
+        .eq("id", bookingId)
+        .maybeSingle();
+      if (singleBooking) matchedBookings = [singleBooking];
     }
 
-    const { data: booking } = await bookingQuery.maybeSingle();
+    const booking = matchedBookings[0] || null;
 
     if (booking) {
-      const expectedAmount =
-        booking.amount_paise ||
-        (booking.amount ? (booking.amount > 2000 ? booking.amount : booking.amount * 100) : 0);
+      const expectedAmount = matchedBookings.reduce((sum, b) => {
+        const bPaise =
+          b.amount_paise || (b.amount ? (b.amount > 2000 ? b.amount : b.amount * 100) : 0);
+        return sum + bPaise;
+      }, 0);
 
       const storedOrderId = booking.razorpay_order_id || booking.payment_order_id;
       if (storedOrderId && storedOrderId !== razorpay_order_id) {
@@ -140,7 +148,7 @@ export async function POST(request: Request) {
 
       const resolvedMethod = (providerPayment["method"] as string) || payment_method || "razorpay";
 
-      // Idempotent update: if already confirmed by webhook, return clean success
+      // Confirm all bookings in the order
       await db
         .from("bookings")
         .update({
@@ -150,11 +158,12 @@ export async function POST(request: Request) {
           razorpay_payment_id,
           payment_id: razorpay_payment_id,
           payment_method: resolvedMethod,
-          amount: Math.round(expectedAmount / 100),
-          amount_paise: expectedAmount,
           updated_at: new Date().toISOString(),
         })
-        .eq("id", booking.id);
+        .in(
+          "id",
+          matchedBookings.map((b) => b.id),
+        );
 
       if (!isMissingPaymentsTable) {
         await db.from("payments").upsert(

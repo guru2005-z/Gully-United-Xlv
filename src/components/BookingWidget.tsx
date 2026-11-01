@@ -51,12 +51,12 @@ export function BookingWidget() {
   const router = useRouter();
   const days = useMemo(() => bookableDays(), []);
   const [selectedDate, setSelectedDate] = useState(() => dateKey(new Date()));
-  const [hour, setHour] = useState<number | null>(null);
+  const [selectedHours, setSelectedHours] = useState<number[]>([]);
   const [players, setPlayers] = useState(10);
   const [user, setUser] = useState<User | null>(null);
   const [form, setForm] = useState({ name: "", phone: "", email: "" });
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [booked, setBooked] = useState<Booking | null>(null);
+  const [booked, setBooked] = useState<(Booking & { hours?: number[] }) | null>(null);
   const [payOpen, setPayOpen] = useState(false);
   const [payInitialTab, setPayInitialTab] = useState<"upi_qr" | "razorpay_me">("upi_qr");
   const [submitting, setSubmitting] = useState(false);
@@ -74,6 +74,21 @@ export function BookingWidget() {
   const [couponLoading, setCouponLoading] = useState(false);
   const [couponError, setCouponError] = useState<string | null>(null);
   const [couponSuccess, setCouponSuccess] = useState<string | null>(null);
+
+  function toggleHour(h: number) {
+    setSelectedHours((prev) =>
+      prev.includes(h) ? prev.filter((x) => x !== h) : [...prev, h].sort((a, b) => a - b),
+    );
+    setAppliedCoupon(null);
+    setCouponSuccess(null);
+    setCouponError(null);
+  }
+
+  function formatSelectedSlots(hours: number[]): string {
+    if (hours.length === 0) return "—";
+    if (hours.length === 1) return slotLabel(hours[0]!);
+    return `${hours.map((h) => slotLabel(h)).join(", ")} (${hours.length} hrs)`;
+  }
 
   useEffect(() => {
     const supabase = createSupabaseBrowserClient();
@@ -167,7 +182,7 @@ export function BookingWidget() {
       router.push("/auth?redirect=/book");
       return;
     }
-    if (!validate() || hour === null) return;
+    if (!validate() || selectedHours.length === 0) return;
     setErrors({});
     setPayInitialTab(tab);
     setPayOpen(true);
@@ -181,7 +196,7 @@ export function BookingWidget() {
       router.push("/auth?redirect=/book");
       return;
     }
-    if (!validate() || hour === null) return;
+    if (!validate() || selectedHours.length === 0) return;
     setSubmitting(true);
     setErrors({});
 
@@ -192,7 +207,8 @@ export function BookingWidget() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           date: selectedDate,
-          hour,
+          hour: selectedHours[0]!,
+          hours: selectedHours,
           players,
           customerName: form.name.trim(),
           customerPhone: form.phone.replace(/\D/g, ""),
@@ -216,7 +232,8 @@ export function BookingWidget() {
         phone: form.phone.replace(/\D/g, ""),
         email: form.email.trim(),
         dateKey: selectedDate,
-        hour,
+        hour: selectedHours[0]!,
+        hours: selectedHours,
         players,
         amount: data.amountRupees ?? (finalPrice || 0),
         status: "CONFIRMED",
@@ -242,7 +259,7 @@ export function BookingWidget() {
       router.push("/auth?redirect=/book");
       return;
     }
-    if (!validate() || hour === null) return;
+    if (!validate() || selectedHours.length === 0) return;
     setPayingRazorpay(true);
     setPaymentNotice(null);
 
@@ -260,7 +277,8 @@ export function BookingWidget() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           date: selectedDate,
-          hour,
+          hour: selectedHours[0]!,
+          hours: selectedHours,
           players,
           customerName: form.name.trim(),
           customerPhone: form.phone.replace(/\D/g, ""),
@@ -332,7 +350,8 @@ export function BookingWidget() {
                 phone: form.phone,
                 email: form.email,
                 dateKey: selectedDate,
-                hour,
+                hour: selectedHours[0]!,
+                hours: selectedHours,
                 players,
                 amount: orderData.amountPaise / 100,
                 status: "CONFIRMED",
@@ -409,7 +428,8 @@ export function BookingWidget() {
   }, [days, selectedDate]);
 
   const taken = takenHours(selectedDate, existing);
-  const price = hour === null ? null : priceForHour(hour);
+  const price =
+    selectedHours.length === 0 ? null : selectedHours.reduce((sum, h) => sum + priceForHour(h), 0);
   const discountAmount = appliedCoupon ? appliedCoupon.discountAmountRupees : 0;
   const subtotalPrice = price !== null ? Math.max(0, price - discountAmount) : null;
   const gstAmount = subtotalPrice !== null ? Math.round(subtotalPrice * 0.03) : null;
@@ -426,7 +446,7 @@ export function BookingWidget() {
       email: form.email,
       players,
       dateKey: selectedDate,
-      hour: hour ?? -1,
+      hour: selectedHours[0] ?? -1,
     });
     const e: Record<string, string> = {};
     if (!result.success) {
@@ -435,7 +455,7 @@ export function BookingWidget() {
         e[key === "dateKey" ? "date" : key] = issue.message;
       }
     }
-    if (hour === null) e["hour"] = "Select a time slot.";
+    if (selectedHours.length === 0) e["hour"] = "Select at least one time slot.";
     setErrors(e);
     return Object.keys(e).length === 0;
   }
@@ -487,7 +507,7 @@ export function BookingWidget() {
                   key={k}
                   onClick={() => {
                     setSelectedDate(k);
-                    setHour(null);
+                    setSelectedHours([]);
                   }}
                   className={`shrink-0 snap-start min-w-[92px] sm:min-w-0 rounded-xl border px-4 py-3 text-left transition-all ${
                     active
@@ -508,13 +528,31 @@ export function BookingWidget() {
 
         {/* Step 2 — time */}
         <fieldset className="mt-8">
-          <div className="flex items-center justify-between">
-            <legend className="text-sm font-extrabold uppercase tracking-[0.2em]">
-              Select hour
-            </legend>
-            <span className="text-xs font-bold text-muted-foreground">
-              {availableCount} slots available
-            </span>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <legend className="text-sm font-extrabold uppercase tracking-[0.2em]">
+                Select time slots
+              </legend>
+              <p className="mt-0.5 text-[0.68rem] font-bold text-muted-foreground">
+                Tap one or multiple 1-hour slots to book together
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              {selectedHours.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setSelectedHours([])}
+                  className="rounded-lg border border-neutral-700 bg-neutral-900 px-2.5 py-1 text-[0.65rem] font-extrabold uppercase tracking-wider text-neutral-300 hover:border-primary/50 hover:text-white transition-colors"
+                >
+                  Clear ({selectedHours.length})
+                </button>
+              )}
+              <span className="text-xs font-bold text-muted-foreground">
+                {selectedHours.length > 0
+                  ? `${selectedHours.length} slot${selectedHours.length > 1 ? "s" : ""} selected`
+                  : `${availableCount} slots available`}
+              </span>
+            </div>
           </div>
           {loadingAvailability && (
             <p className="mt-2 text-xs text-muted-foreground animate-pulse">
@@ -526,14 +564,14 @@ export function BookingWidget() {
               const isTaken = taken.includes(h);
               const isPast = isPastSlot(selectedDate, h);
               const disabled = isTaken || isPast;
-              const active = hour === h;
+              const active = selectedHours.includes(h);
               const p = priceForHour(h);
               return (
                 <button
                   type="button"
                   key={h}
                   disabled={disabled}
-                  onClick={() => setHour(h)}
+                  onClick={() => toggleHour(h)}
                   className={`group relative rounded-xl p-3.5 text-left transition-all duration-200 ${
                     active ? "slot-selected" : disabled ? "slot-booked" : "slot-available"
                   }`}
@@ -543,6 +581,10 @@ export function BookingWidget() {
                     {disabled ? (
                       <span className="text-[0.6rem] font-bold uppercase tracking-wider flex items-center gap-1 opacity-75">
                         <Lock size={10} /> {isPast ? "Past" : "Taken"}
+                      </span>
+                    ) : active ? (
+                      <span className="text-[0.6rem] font-black uppercase tracking-wider flex items-center gap-0.5 text-black">
+                        <Check size={11} strokeWidth={3} /> Selected
                       </span>
                     ) : null}
                   </div>
@@ -763,10 +805,10 @@ export function BookingWidget() {
             </div>
             <div>
               <dt className="text-[0.62rem] uppercase tracking-[0.22em] text-neutral-400 font-bold">
-                Time
+                Time ({selectedHours.length || 0} {selectedHours.length === 1 ? "Slot" : "Slots"})
               </dt>
               <dd className="mt-1 text-sm font-extrabold text-white">
-                {hour === null ? "—" : slotLabel(hour)}
+                {formatSelectedSlots(selectedHours)}
               </dd>
             </div>
             <div>
@@ -793,7 +835,10 @@ export function BookingWidget() {
           {price !== null && gstAmount !== null && (
             <div className="space-y-1.5 border-t border-neutral-800/80 pt-3 text-xs">
               <div className="flex items-center justify-between text-neutral-300 font-medium">
-                <span>Base Turf Slot Rate:</span>
+                <span>
+                  Base Turf Slot Rate ({selectedHours.length}{" "}
+                  {selectedHours.length === 1 ? "hr" : "hrs"}):
+                </span>
                 <span className="font-mono font-bold text-white">₹{price}</span>
               </div>
               {appliedCoupon && (
@@ -894,8 +939,8 @@ export function BookingWidget() {
           gstAmount={gstAmount}
           initialTab={payInitialTab}
           slotSummary={
-            hour !== null
-              ? `${prettyDate(selectedDate)} · ${slotLabel(hour)}`
+            selectedHours.length > 0
+              ? `${prettyDate(selectedDate)} · ${formatSelectedSlots(selectedHours)}`
               : prettyDate(selectedDate)
           }
           submitting={submitting}
@@ -1195,11 +1240,20 @@ function PaymentModal({
   );
 }
 
-function Confirmation({ booking, onReset }: { booking: Booking; onReset: () => void }) {
+function Confirmation({
+  booking,
+  onReset,
+}: {
+  booking: Booking & { hours?: number[] };
+  onReset: () => void;
+}) {
+  const timeText =
+    booking.hours && booking.hours.length > 1
+      ? `${booking.hours.map((h) => slotLabel(h)).join(", ")} (${booking.hours.length} hrs)`
+      : slotLabel(booking.hour);
+
   const waText = encodeURIComponent(
-    `Hi Gully United XLV, I have booked slot ${booking.ref} on ${prettyDate(booking.dateKey)} at ${slotLabel(
-      booking.hour,
-    )} for ${booking.players} players. (${booking.notes || "Paid Online"})`,
+    `Hi Gully United XLV, I have booked slot ${booking.ref} on ${prettyDate(booking.dateKey)} at ${timeText} for ${booking.players} players. (${booking.notes || "Paid Online"})`,
   );
   return (
     <div className="panel relative overflow-hidden p-6 text-center sm:p-10">
@@ -1224,7 +1278,7 @@ function Confirmation({ booking, onReset }: { booking: Booking; onReset: () => v
         <dl className="mx-auto mt-8 grid max-w-xl grid-cols-2 gap-6 sm:grid-cols-4">
           {[
             ["Date", prettyDate(booking.dateKey)],
-            ["Time", slotLabel(booking.hour)],
+            ["Time", timeText],
             ["Players", `${booking.players}`],
             ["Amount", `₹${booking.amount}`],
           ].map(([k, v]) => (

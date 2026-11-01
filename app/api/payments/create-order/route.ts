@@ -16,6 +16,7 @@ const createOrderSchema = z.object({
   bookingId: z.string().uuid("Invalid booking ID format.").optional(),
   date: z.string().optional(),
   hour: z.number().int().min(6).max(22).optional(),
+  hours: z.array(z.number().int().min(6).max(22)).min(1).max(17).optional(),
   players: z.number().int().min(1).max(16).optional(),
   idempotencyKey: z.string().optional(),
   customerName: z.string().optional(),
@@ -90,6 +91,7 @@ export async function POST(request: Request) {
       bookingId,
       date,
       hour,
+      hours,
       players = 12,
       idempotencyKey,
       customerName,
@@ -98,6 +100,10 @@ export async function POST(request: Request) {
       couponCode,
       discountPaise: _providedDiscountPaise,
     } = parseResult.data;
+
+    const hoursList = Array.from(
+      new Set(hours && hours.length > 0 ? hours : hour !== undefined ? [hour] : []),
+    ).sort((a, b) => a - b);
 
     const supabase = await createSupabaseServerClient();
     const db = getSupabaseAdmin();
@@ -112,6 +118,8 @@ export async function POST(request: Request) {
     }
 
     let targetBooking: TargetBookingRecord | null = null;
+    const allBookingIds: string[] = [];
+    let totalOrderAmountPaise: number | null = null;
 
     const keyId = process.env["NEXT_PUBLIC_RAZORPAY_KEY_ID"] || process.env["RAZORPAY_KEY_ID"];
     const keySecret = process.env["RAZORPAY_KEY_SECRET"];
@@ -175,7 +183,8 @@ export async function POST(request: Request) {
         );
       }
       targetBooking = existing as unknown as TargetBookingRecord;
-    } else if (date && hour !== undefined) {
+      allBookingIds.push(existing.id);
+    } else if (date && hoursList.length > 0) {
       const emailResult = z
         .string()
         .trim()
@@ -217,73 +226,87 @@ export async function POST(request: Request) {
         );
       }
 
-      const calculatedPrice = calculateSlotPrice(hour);
-      const discountPaise = await resolveCouponDiscount(
-        db,
-        couponCode,
-        calculatedPrice.amountPaise,
-      );
-      const subtotalPaise = Math.max(0, calculatedPrice.amountPaise - discountPaise);
+      const slotPricesPaise = hoursList.map((h) => calculateSlotPrice(h).amountPaise);
+      const totalBasePaise = slotPricesPaise.reduce((sum, p) => sum + p, 0);
+      const discountPaise = await resolveCouponDiscount(db, couponCode, totalBasePaise);
+      const subtotalPaise = Math.max(0, totalBasePaise - discountPaise);
       const gstPaise = calculateGstPaise(subtotalPaise);
       const finalAmountPaise = subtotalPaise + gstPaise;
+      totalOrderAmountPaise = finalAmountPaise;
 
-      const publicRef = `GUX-${Math.floor(1000 + Math.random() * 9000)}`;
-      const { data: holdResult, error: holdError } = await db.rpc("create_booking_hold", {
-        p_venue_id: venue.id,
-        p_customer_name: customerName.trim(),
-        p_customer_phone: phoneResult.e164,
-        p_customer_email: emailResult.data.toLowerCase(),
-        p_players: players,
-        p_booking_date: date,
-        p_start_hour: hour,
-        p_amount_paise: finalAmountPaise,
-        p_public_reference: publicRef,
-        p_hold_duration_minutes: VENUE_RULES.holdDurationMinutes,
-      });
+      const basePublicRef = `GUX-${Math.floor(1000 + Math.random() * 9000)}`;
+      let allocatedPaise = 0;
 
-      if (holdError) {
-        return NextResponse.json(
-          {
-            error: {
-              code: holdError.code === "23505" ? "SLOT_UNAVAILABLE" : "SLOT_HOLD_FAILED",
-              message:
-                holdError.code === "23505"
-                  ? "That slot was just booked by another player. Please choose another time."
-                  : holdError.message,
+      for (let i = 0; i < hoursList.length; i++) {
+        const slotHour = hoursList[i]!;
+        const slotBasePaise = slotPricesPaise[i]!;
+        const isLast = i === hoursList.length - 1;
+        const slotPaise = isLast
+          ? Math.max(0, finalAmountPaise - allocatedPaise)
+          : Math.round((finalAmountPaise * slotBasePaise) / Math.max(1, totalBasePaise));
+        allocatedPaise += slotPaise;
+
+        const slotRef = hoursList.length === 1 ? basePublicRef : `${basePublicRef}-${i + 1}`;
+        const { data: holdResult, error: holdError } = await db.rpc("create_booking_hold", {
+          p_venue_id: venue.id,
+          p_customer_name: customerName.trim(),
+          p_customer_phone: phoneResult.e164,
+          p_customer_email: emailResult.data.toLowerCase(),
+          p_players: players,
+          p_booking_date: date,
+          p_start_hour: slotHour,
+          p_amount_paise: slotPaise,
+          p_public_reference: slotRef,
+          p_hold_duration_minutes: VENUE_RULES.holdDurationMinutes,
+        });
+
+        if (holdError) {
+          return NextResponse.json(
+            {
+              error: {
+                code: holdError.code === "23505" ? "SLOT_UNAVAILABLE" : "SLOT_HOLD_FAILED",
+                message:
+                  holdError.code === "23505"
+                    ? "One of the selected slots was just booked by another player. Please choose another time."
+                    : holdError.message,
+              },
             },
-          },
-          { status: holdError.code === "23505" ? 409 : 400 },
-        );
-      }
+            { status: holdError.code === "23505" ? 409 : 400 },
+          );
+        }
 
-      const createdBookingId = holdResult?.[0]?.booking_id || holdResult?.booking_id;
-      const { data: createdHold } = await db
-        .from("bookings")
-        .select("*")
-        .eq("id", createdBookingId)
-        .single();
-
-      if (!createdHold) {
-        return NextResponse.json(
-          { error: { code: "BOOKING_RESOLVE_FAILED", message: "Failed to resolve booking." } },
-          { status: 500 },
-        );
-      }
-
-      if (userId) {
-        const { error: userIdErr } = await db
+        const createdBookingId = holdResult?.[0]?.booking_id || holdResult?.booking_id;
+        const { data: createdHold } = await db
           .from("bookings")
-          .update({ customer_id: userId })
-          .eq("id", createdHold.id);
-        if (userIdErr) {
-          await db.from("bookings").update({ user_id: userId }).eq("id", createdHold.id);
+          .select("*")
+          .eq("id", createdBookingId)
+          .single();
+
+        if (!createdHold) {
+          return NextResponse.json(
+            { error: { code: "BOOKING_RESOLVE_FAILED", message: "Failed to resolve booking." } },
+            { status: 500 },
+          );
+        }
+
+        if (userId) {
+          const { error: userIdErr } = await db
+            .from("bookings")
+            .update({ customer_id: userId })
+            .eq("id", createdHold.id);
+          if (userIdErr) {
+            await db.from("bookings").update({ user_id: userId }).eq("id", createdHold.id);
+          }
+        }
+
+        allBookingIds.push(createdHold.id);
+        if (!targetBooking) {
+          targetBooking = createdHold as unknown as TargetBookingRecord;
         }
       }
-
-      targetBooking = createdHold as unknown as TargetBookingRecord;
     } else {
       return NextResponse.json(
-        { error: { code: "INVALID_INPUT", message: "bookingId or date & hour required." } },
+        { error: { code: "INVALID_INPUT", message: "bookingId or date & hour(s) required." } },
         { status: 400 },
       );
     }
@@ -296,7 +319,8 @@ export async function POST(request: Request) {
     }
 
     const priceInfo = calculateSlotPrice(targetBooking.start_hour);
-    const amountPaise = targetBooking.amount_paise || priceInfo.amountPaise;
+    const amountPaise =
+      totalOrderAmountPaise ?? targetBooking.amount_paise ?? priceInfo.amountPaise;
     const publicRef = targetBooking.public_reference || targetBooking.reference || "GUX-HOLD";
 
     // 3. Create Razorpay Order with retries
@@ -306,27 +330,26 @@ export async function POST(request: Request) {
       receipt: publicRef,
       notes: {
         booking_id: targetBooking.id,
+        booking_ids: allBookingIds.join(","),
         turf: "Gully United XLV",
         date: targetBooking.booking_date || targetBooking.date_key || "",
-        hour: String(targetBooking.start_hour),
+        hour: hoursList.length > 0 ? hoursList.join(",") : String(targetBooking.start_hour),
         players: String(targetBooking.players || 12),
       },
     });
 
-    // 4. Update booking with Razorpay Order ID
+    // 4. Update booking(s) with Razorpay Order ID
     const { error: bookingUpdateError } = await db
       .from("bookings")
       .update({
         razorpay_order_id: razorpayOrder.id,
         payment_order_id: razorpayOrder.id,
         payment_provider: "razorpay",
-        amount_paise: amountPaise,
-        amount: Math.round(amountPaise / 100),
         status: "HOLD",
         payment_status: "UNPAID",
         updated_at: new Date().toISOString(),
       })
-      .eq("id", targetBooking.id);
+      .in("id", allBookingIds.length > 0 ? allBookingIds : [targetBooking.id]);
 
     if (bookingUpdateError) {
       return NextResponse.json(
